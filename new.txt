@@ -1,0 +1,22 @@
+goos: linux
+goarch: amd64
+pkg: github.com/KARTIKrocks/go-ratelimit
+cpu: 11th Gen Intel(R) Core(TM) i5-11400H @ 2.70GHz
+BenchmarkLeakyBucket_Allow-12                     	15600800	        75.81 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLeakyBucket_AllowParallel-12             	 6965540	       153.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedWindow_Allow-12                     	15730526	        77.05 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedWindow_AllowParallel-12             	 6786889	       162.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlidingWindow_Allow-12                   	17197154	        71.32 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlidingWindowCounter_Allow-12            	 9526008	       106.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlidingWindowCounter_AllowParallel-12    	 5575962	       188.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedFixedWindow_Allow-12                	12098403	       100.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedSlidingWindow_Allow-12              	 8220714	       134.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedLeakyBucket_Allow-12                	10970016	        94.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMiddleware-12                            	  593883	      2280 ns/op	    1040 B/op	      13 allocs/op
+BenchmarkTokenBucket_Allow-12                     	16570334	        73.08 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTokenBucket_AllowParallel-12             	 7098220	       157.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedTokenBucket_Allow-12                	12716998	        94.59 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedTokenBucket_AllowParallel-12        	 6188818	       191.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKeyedTokenBucket_MultipleKeys-12         	12475839	        99.45 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/KARTIKrocks/go-ratelimit	26.815s

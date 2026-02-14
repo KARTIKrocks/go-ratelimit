@@ -1,0 +1,11 @@
+go 1.22
+
+use (
+	.
+	./redisstore
+	./metrics
+	./examples/basic
+	./examples/multitier
+	./examples/redis
+	./examples/prometheus
+)
