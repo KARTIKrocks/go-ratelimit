@@ -68,17 +68,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run benchmarks
-        run: go test -bench=. -benchmem ./... | tee benchmark.txt
+        # run: go test -bench=. -benchmem ./... | tee benchmark.txt
+        run: go test -bench=. -benchmem ./...
 
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: "go"
-          output-file-path: benchmark.txt
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          save-data-file: false
-          skip-fetch-gh-pages: true
+      # - name: Store benchmark result
+      #   uses: benchmark-action/github-action-benchmark@v1
+      #   with:
+      #     tool: "go"
+      #     output-file-path: benchmark.txt
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     auto-push: false
+      #     save-data-file: false
+      #     skip-fetch-gh-pages: true
 
   integration:
     name: Integration Tests
