@@ -309,7 +309,7 @@ func TestKeyedLeakyBucketPerDuration(t *testing.T) {
 // --- FixedWindow extended tests ---
 
 func TestFixedWindow_Wait(t *testing.T) {
-	limiter := NewFixedWindow(1, 100*time.Millisecond)
+	limiter := NewFixedWindow(1, time.Second)
 	limiter.Allow()
 
 	ctx := context.Background()
