@@ -1,3 +1,3 @@
 module github.com/KARTIKrocks/go-ratelimit
 
-go 1.22
+go 1.26
