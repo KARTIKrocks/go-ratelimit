@@ -368,8 +368,7 @@ func BenchmarkMiddleware(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 	}
@@ -448,4 +447,82 @@ func TestTrustedProxiesKeyFunc_PanicsOnInvalidCIDR(t *testing.T) {
 		}
 	}()
 	TrustedProxiesKeyFunc("not-a-cidr")
+}
+
+func TestIPKeyFunc_IPv6UsesSlash64(t *testing.T) {
+	tests := []struct {
+		remoteAddr string
+		expected   string
+	}{
+		{"[2001:db8:1:2:aaaa::1]:1234", "2001:db8:1:2::/64"},
+		{"[2001:db8:1:2:ffff:ffff:ffff:ffff]:1234", "2001:db8:1:2::/64"},
+		{"[fe80::1%eth0]:1234", "fe80::/64"},
+		{"[::ffff:192.0.2.1]:1234", "192.0.2.1"},
+		{"192.0.2.1:1234", "192.0.2.1"},
+		{"not-an-ip", "not-an-ip"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.remoteAddr, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/x", nil)
+			req.RemoteAddr = tt.remoteAddr
+			if got := IPKeyFunc(req); got != tt.expected {
+				t.Errorf("IPKeyFunc = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIPKeyFuncs_ShareIPv6Masking(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api", nil)
+	req.RemoteAddr = "[2001:db8::1]:1234"
+	const want = "2001:db8::/64"
+
+	if got := IPPathKeyFunc(req); got != want+":/api" {
+		t.Errorf("IPPathKeyFunc = %q", got)
+	}
+	if got := UserIDKeyFunc("uid")(req); got != want {
+		t.Errorf("UserIDKeyFunc fallback = %q", got)
+	}
+	if got := TrustedProxyKeyFunc(req); got != want {
+		t.Errorf("TrustedProxyKeyFunc = %q", got)
+	}
+
+	req.RemoteAddr = "10.0.0.1:1234"
+	req.Header.Set("X-Forwarded-For", "2001:db8::2")
+	if got := TrustedProxiesKeyFunc("10.0.0.0/8")(req); got != want {
+		t.Errorf("TrustedProxiesKeyFunc = %q", got)
+	}
+}
+
+func TestHeaderKeyFunc_FallsBackToIP(t *testing.T) {
+	fn := HeaderKeyFunc("X-API-Key")
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	if got := fn(req); got != "ip:192.0.2.1" {
+		t.Errorf("without header = %q, want ip:192.0.2.1", got)
+	}
+
+	// A header value can't impersonate another client's fallback key.
+	req.Header.Set("X-API-Key", "ip:192.0.2.1")
+	if got := fn(req); got != "header:ip:192.0.2.1" {
+		t.Errorf("with header = %q, want header:ip:192.0.2.1", got)
+	}
+}
+
+func TestHeaderKeyFunc_MissingHeaderDoesNotShareBucket(t *testing.T) {
+	limiter := NewKeyedFixedWindow(1, time.Hour, 0)
+	defer limiter.Close()
+	handler := Middleware(limiter, WithKeyFunc(HeaderKeyFunc("X-API-Key")))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	for _, addr := range []string{"192.0.2.1:1", "192.0.2.2:1"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = addr
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("client %s without header got %d; clients share a bucket", addr, rec.Code)
+		}
+	}
 }

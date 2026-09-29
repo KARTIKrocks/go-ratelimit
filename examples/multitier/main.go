@@ -61,7 +61,7 @@ func getUserKey(r *http.Request) string {
 	if userID := r.Header.Get("X-User-ID"); userID != "" {
 		return "user:" + userID
 	}
-	return "ip:" + ratelimit.GetClientIP(r)
+	return "ip:" + ratelimit.IPKeyFunc(r)
 }
 
 func customLimitReached(w http.ResponseWriter, r *http.Request, result ratelimit.Result) {
