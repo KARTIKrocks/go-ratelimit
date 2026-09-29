@@ -224,6 +224,8 @@ func NewKeyedFixedWindow(limit int, window time.Duration, cleanupInterval time.D
 // SetMaxKeys sets the maximum number of keys tracked. When the limit is
 // reached, the least recently used key is evicted to make room for a new
 // one; an evicted key starts again with no usage. Zero means unlimited.
+// Size n well above the number of keys active at once: a client that can
+// create more than n new keys can evict another key and reset its usage.
 // Returns the receiver for chaining.
 func (kfw *KeyedFixedWindow) SetMaxKeys(n int) *KeyedFixedWindow {
 	kfw.store.mu.Lock()

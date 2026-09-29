@@ -254,6 +254,8 @@ func NewKeyedLeakyBucketPerDuration(count int, per time.Duration, capacity int, 
 // SetMaxKeys sets the maximum number of keys tracked. When the limit is
 // reached, the least recently used key is evicted to make room for a new
 // one; an evicted key starts again with no usage. Zero means unlimited.
+// Size n well above the number of keys active at once: a client that can
+// create more than n new keys can evict another key and reset its usage.
 // Returns the receiver for chaining.
 func (klb *KeyedLeakyBucket) SetMaxKeys(n int) *KeyedLeakyBucket {
 	klb.store.mu.Lock()

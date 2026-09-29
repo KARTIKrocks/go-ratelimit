@@ -245,6 +245,8 @@ func NewKeyedTokenBucket(rate float64, burst int, cleanupInterval time.Duration)
 // SetMaxKeys sets the maximum number of keys tracked. When the limit is
 // reached, the least recently used key is evicted to make room for a new
 // one; an evicted key starts again with a full bucket. Zero means unlimited.
+// Size n well above the number of keys active at once: a client that can
+// create more than n new keys can evict another key and reset its usage.
 // Returns the receiver for chaining.
 func (kb *KeyedTokenBucket) SetMaxKeys(n int) *KeyedTokenBucket {
 	kb.store.mu.Lock()

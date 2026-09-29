@@ -273,6 +273,28 @@ func (swc *SlidingWindowCounter) count(now time.Time) float64 {
 	return float64(swc.prevCount)*(1-weight) + float64(swc.currCount)
 }
 
+// retryAfter returns how long until n more requests fit.
+func (swc *SlidingWindowCounter) retryAfter(now time.Time, n int) time.Duration {
+	return slidingRetryAfter(swc.prevCount, swc.currCount, n, swc.limit, now.Sub(swc.windowStart), swc.window)
+}
+
+// slidingRetryAfter returns how long until n more requests fit in a sliding
+// window counter, where the weighted count is prev*(1-elapsed/window) + curr.
+func slidingRetryAfter(prev, curr, n, limit int, elapsed, window time.Duration) time.Duration {
+	if free := limit - curr - n; free >= 0 {
+		if prev == 0 {
+			return 0
+		}
+		// Fits in this window once the previous window's weight has faded.
+		fade := time.Duration((1 - float64(free)/float64(prev)) * float64(window))
+		return max(fade-elapsed, 0)
+	}
+	// Otherwise wait for the next window, where curr becomes the previous
+	// count and fades in the same way.
+	fade := time.Duration(max(0, 1-float64(limit-n)/float64(curr)) * float64(window))
+	return window - elapsed + fade
+}
+
 // Allow checks if a request is allowed.
 func (swc *SlidingWindowCounter) Allow() bool {
 	return swc.AllowN(1)
@@ -319,10 +341,7 @@ func (swc *SlidingWindowCounter) WaitN(ctx context.Context, n int) error {
 			return nil
 		}
 
-		waitTime := swc.windowStart.Add(swc.window).Sub(now)
-		if waitTime < 0 {
-			waitTime = time.Millisecond
-		}
+		waitTime := max(swc.retryAfter(now, n), time.Millisecond)
 		swc.mu.Unlock()
 
 		timer := time.NewTimer(waitTime)
@@ -375,7 +394,7 @@ func (swc *SlidingWindowCounter) CheckN(n int) Result {
 		result.Allowed = true
 	} else {
 		result.Allowed = false
-		result.RetryAfter = swc.windowStart.Add(swc.window).Sub(now)
+		result.RetryAfter = swc.retryAfter(now, n)
 	}
 
 	return result
@@ -411,7 +430,7 @@ func (swc *SlidingWindowCounter) TakeN(n int) Result {
 		result.Remaining = int(float64(swc.limit) - swc.count(now))
 	} else {
 		result.Allowed = false
-		result.RetryAfter = swc.windowStart.Add(swc.window).Sub(now)
+		result.RetryAfter = swc.retryAfter(now, n)
 	}
 
 	return result
@@ -452,6 +471,8 @@ func NewKeyedSlidingWindow(limit int, window time.Duration, cleanupInterval time
 // SetMaxKeys sets the maximum number of keys tracked. When the limit is
 // reached, the least recently used key is evicted to make room for a new
 // one; an evicted key starts again with no usage. Zero means unlimited.
+// Size n well above the number of keys active at once: a client that can
+// create more than n new keys can evict another key and reset its usage.
 // Returns the receiver for chaining.
 func (ksw *KeyedSlidingWindow) SetMaxKeys(n int) *KeyedSlidingWindow {
 	ksw.store.mu.Lock()
@@ -571,7 +592,7 @@ func (ksw *KeyedSlidingWindow) do(key string, n int, consume bool) Result {
 		Limit:      ksw.limit,
 		Remaining:  int(float64(ksw.limit) - count),
 		ResetAt:    resetAt,
-		RetryAfter: resetAt.Sub(now),
+		RetryAfter: slidingRetryAfter(entry.prevCount, entry.currCount, n, ksw.limit, now.Sub(entry.windowStart), ksw.window),
 	}
 }
 

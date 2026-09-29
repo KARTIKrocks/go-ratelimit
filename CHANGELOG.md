@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keyed limiters' `Check`/`CheckN` no longer create an entry for an unknown
   key, so read-only calls no longer use up `SetMaxKeys` slots
+- `SlidingWindowCounter` and `KeyedSlidingWindow` report the earliest time a
+  request fits as `RetryAfter`, instead of always the end of the window, so
+  `WaitN` no longer blocks up to a full window longer than needed
 - `AllowN`/`CheckN`/`TakeN`/`WaitN` now reject `n <= 0`. Negative `n` previously
   freed up capacity (e.g. `FixedWindow.AllowN(-100)` allowed 100 extra requests).
 - `WaitN` returns `ErrExceedsLimit` when `n` exceeds the limiter's capacity
