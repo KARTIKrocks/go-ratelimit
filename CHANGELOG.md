@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- IP-based key functions (`IPKeyFunc`, `IPPathKeyFunc`, `TrustedProxyKeyFunc`,
+  `TrustedProxiesKeyFunc` and the `UserIDKeyFunc` fallback) key IPv6 clients
+  by their /64 network instead of the full address. A client that controls a
+  /64 could otherwise rotate through 2^64 addresses to avoid its limit.
+  IPv4-mapped IPv6 addresses are keyed as IPv4. `GetClientIP` still returns
+  the exact address.
+- `HeaderKeyFunc` keys requests without the header by client IP. Previously
+  they all shared one empty-key bucket, so one client could use it up for
+  everyone.
+
+### Changed
+
+- **Breaking:** `HeaderKeyFunc` keys are now prefixed (`header:<value>`, or
+  `ip:<address>` without the header), so a header value can't collide with
+  another client's IP key. Existing Redis counters for these keys reset once.
+
 ## [1.1.0] - 2026-09-29
 
 Released together with the first tagged versions of the submodules,

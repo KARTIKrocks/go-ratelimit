@@ -102,10 +102,10 @@
 //
 // Extract rate limit keys from requests:
 //
-//	ratelimit.IPKeyFunc                    // By IP address (RemoteAddr, safe default)
+//	ratelimit.IPKeyFunc                    // By IP address (RemoteAddr, safe default; IPv6 by /64)
 //	ratelimit.TrustedProxyKeyFunc          // By IP from proxy headers, single proxy (opt-in)
 //	ratelimit.TrustedProxiesKeyFunc(cidrs...) // By IP behind one or more known proxies
-//	ratelimit.HeaderKeyFunc("X-API-Key")   // By header
+//	ratelimit.HeaderKeyFunc("X-API-Key")   // By header, falling back to IP
 //	ratelimit.PathKeyFunc                  // By path
 //	ratelimit.IPPathKeyFunc                // By IP + path
 //	ratelimit.UserIDKeyFunc("userID")      // By user ID from context

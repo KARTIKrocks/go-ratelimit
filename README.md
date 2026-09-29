@@ -189,7 +189,9 @@ result := limiter.TakeNCtx(ctx, "user:123", 1)
 ### Custom Key Functions
 
 ```go
-// By IP address (default, uses RemoteAddr - safe, not spoofable)
+// By IP address (default, uses RemoteAddr - safe, not spoofable).
+// All IP key functions key IPv6 clients by their /64 network, since one
+// client usually controls a whole /64.
 ratelimit.WithKeyFunc(ratelimit.IPKeyFunc)
 
 // By IP from proxy headers, behind exactly one proxy (opt-in; uses the
@@ -200,7 +202,7 @@ ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc)
 // request comes from a trusted proxy, and trusted hops are skipped
 ratelimit.WithKeyFunc(ratelimit.TrustedProxiesKeyFunc("10.0.0.0/8"))
 
-// By header
+// By header; requests without it are keyed by client IP
 ratelimit.WithKeyFunc(ratelimit.HeaderKeyFunc("X-API-Key"))
 
 // By user ID from context

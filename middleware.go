@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -190,15 +191,39 @@ func jsonOnLimitReached(w http.ResponseWriter, result Result, statusCode int) {
 
 // Key Functions
 
-// IPKeyFunc extracts the client IP address as the rate limit key.
-func IPKeyFunc(r *http.Request) string {
-	return GetClientIP(r)
+// ipKey turns a client IP into a rate-limit key. IPv6 addresses are reduced
+// to their /64 network: a single client is usually given a whole /64, so
+// keying by full address would let it rotate through 2^64 keys. IPv4-mapped
+// IPv6 addresses are keyed as IPv4. Strings that are not IPs are returned
+// unchanged.
+func ipKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap().WithZone("")
+	if addr.Is4() {
+		return addr.String()
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
-// HeaderKeyFunc creates a key function that uses a header value.
+// IPKeyFunc uses the client IP address (RemoteAddr) as the rate limit key.
+// IPv6 clients are keyed by their /64 network.
+func IPKeyFunc(r *http.Request) string {
+	return ipKey(GetClientIP(r))
+}
+
+// HeaderKeyFunc creates a key function that uses a header value, such as an
+// API key. Requests without the header are keyed by client IP instead of
+// sharing one bucket. Header and IP keys are prefixed differently, so a
+// header value can never collide with another client's IP key.
 func HeaderKeyFunc(header string) KeyFunc {
 	return func(r *http.Request) string {
-		return r.Header.Get(header)
+		if v := r.Header.Get(header); v != "" {
+			return "header:" + v
+		}
+		return "ip:" + IPKeyFunc(r)
 	}
 }
 
@@ -208,7 +233,7 @@ func UserIDKeyFunc(ctxKey any) KeyFunc {
 		if userID := r.Context().Value(ctxKey); userID != nil {
 			return fmt.Sprintf("%v", userID)
 		}
-		return GetClientIP(r)
+		return IPKeyFunc(r)
 	}
 }
 
@@ -222,9 +247,10 @@ func MethodPathKeyFunc(r *http.Request) string {
 	return r.Method + ":" + r.URL.Path
 }
 
-// IPPathKeyFunc uses IP + path as the key.
+// IPPathKeyFunc uses IP + path as the key. IPv6 clients are keyed by their
+// /64 network.
 func IPPathKeyFunc(r *http.Request) string {
-	return GetClientIP(r) + ":" + r.URL.Path
+	return IPKeyFunc(r) + ":" + r.URL.Path
 }
 
 // CompositeKeyFunc combines multiple key functions.
@@ -281,9 +307,10 @@ func GetClientIPFromHeaders(r *http.Request) string {
 
 // TrustedProxyKeyFunc creates a key function that extracts client IP from
 // proxy headers. Only use when the server is behind a single trusted reverse
-// proxy. See GetClientIPFromHeaders.
+// proxy. See GetClientIPFromHeaders. IPv6 clients are keyed by their /64
+// network.
 func TrustedProxyKeyFunc(r *http.Request) string {
-	return GetClientIPFromHeaders(r)
+	return ipKey(GetClientIPFromHeaders(r))
 }
 
 // TrustedProxiesKeyFunc creates a key function for deployments behind one or
@@ -292,7 +319,8 @@ func TrustedProxyKeyFunc(r *http.Request) string {
 //
 // Proxy headers are honored only when the request comes directly from a
 // trusted proxy. The client IP is the rightmost X-Forwarded-For entry that is
-// not itself a trusted proxy. Otherwise the key is RemoteAddr.
+// not itself a trusted proxy. Otherwise the key is RemoteAddr. IPv6 clients
+// are keyed by their /64 network.
 // It panics if a CIDR cannot be parsed.
 func TrustedProxiesKeyFunc(trustedCIDRs ...string) KeyFunc {
 	nets := make([]*net.IPNet, 0, len(trustedCIDRs))
@@ -325,7 +353,7 @@ func TrustedProxiesKeyFunc(trustedCIDRs ...string) KeyFunc {
 	return func(r *http.Request) string {
 		remote := GetClientIP(r)
 		if ip := net.ParseIP(remote); ip == nil || !trusted(ip) {
-			return remote
+			return ipKey(remote)
 		}
 		ips := forwardedFor(r)
 		client := remote
@@ -340,7 +368,7 @@ func TrustedProxiesKeyFunc(trustedCIDRs ...string) KeyFunc {
 				break
 			}
 		}
-		return client
+		return ipKey(client)
 	}
 }
 
