@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** IPv6 clients are keyed by /64 (see Security). All clients in
+  the same /64 now share one limit, and existing Redis counters for IPv6
+  clients reset once. If your IPv6 users share a /64, for example on some
+  hosting providers, raise the limit or key them with a custom `KeyFunc` built
+  on `GetClientIP`.
 - **Breaking:** `HeaderKeyFunc` keys are now prefixed (`header:<value>`, or
   `ip:<address>` without the header), so a header value can't collide with
   another client's IP key. Existing Redis counters for these keys reset once.
