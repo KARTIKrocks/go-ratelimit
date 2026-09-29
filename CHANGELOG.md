@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-29
+
+Released together with the first tagged versions of the submodules,
+`redisstore/v1.0.0` and `metrics/v1.0.0`. `redisstore` requires the root
+module at `v1.1.0` or later.
+
 ### Security
 
 - `GetClientIPFromHeaders` and `TrustedProxyKeyFunc` now use the rightmost
@@ -80,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `redisstore` limiters validate `n` like the in-memory limiters and no longer
   call Redis for invalid `n`
 
+## [1.0.0] - 2026-02-17
+
+Same code as 0.0.1, tagged as the first stable release.
+
 ## [0.0.1] - 2026-02-14
 
 ### Added
@@ -127,3 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD with GitHub Actions
 - golangci-lint configuration
 - Makefile for common tasks
+
+[Unreleased]: https://github.com/KARTIKrocks/go-ratelimit/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/KARTIKrocks/go-ratelimit/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/KARTIKrocks/go-ratelimit/releases/tag/v1.0.0
+[0.0.1]: https://github.com/KARTIKrocks/go-ratelimit/releases/tag/v0.0.1
