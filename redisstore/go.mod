@@ -3,7 +3,7 @@ module github.com/KARTIKrocks/go-ratelimit/redisstore
 go 1.27
 
 require (
-	github.com/KARTIKrocks/go-ratelimit v0.0.0
+	github.com/KARTIKrocks/go-ratelimit v1.0.0
 	github.com/redis/go-redis/v9 v9.22.0
 )
 

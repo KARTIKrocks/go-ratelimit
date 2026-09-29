@@ -12,7 +12,38 @@ import (
 // Common errors.
 var (
 	ErrRateLimitExceeded = errors.New("rate limit exceeded")
+
+	// ErrInvalidN is returned when n is zero or negative.
+	ErrInvalidN = errors.New("ratelimit: n must be positive")
+
+	// ErrExceedsLimit is returned when n is larger than the limiter's
+	// capacity, so the request can never be allowed.
+	ErrExceedsLimit = errors.New("ratelimit: n exceeds limiter capacity")
 )
+
+// validateN reports whether n can ever be satisfied by a limiter whose
+// capacity (burst, limit or bucket size) is limit.
+func validateN(n, limit int) error {
+	if n <= 0 {
+		return ErrInvalidN
+	}
+	if n > limit {
+		return ErrExceedsLimit
+	}
+	return nil
+}
+
+// sleepCtx waits for d or until ctx is done, whichever comes first.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 // Compile-time interface compliance checks.
 var (
@@ -273,16 +304,36 @@ func (s *MemoryStore) Close() {
 
 // Multi combines multiple limiters with AND logic.
 // All limiters must allow the request for it to be allowed.
-// A mutex serializes AllowN/WaitN to prevent TOCTOU races when checking
-// multiple limiters.
+//
+// When every limiter implements ResultLimiter (all built-in limiters do),
+// Multi checks all of them before consuming from any, so a request denied by
+// one limiter does not use up capacity in the others. With a limiter that
+// does not implement ResultLimiter, Multi falls back to consuming from each
+// limiter in turn and cannot undo earlier consumption.
+//
+// A mutex serializes AllowN, and each check-then-take step of WaitN, across
+// callers of the same Multi. The fallback WaitN does not hold it, since it
+// blocks inside the wrapped limiters. The guarantee only holds if the wrapped
+// limiters are not also used directly.
 type Multi struct {
 	limiters []Limiter
+	checkers []ResultLimiter // nil unless every limiter is a ResultLimiter
 	mu       sync.Mutex
 }
 
 // NewMulti creates a new multi-limiter.
 func NewMulti(limiters ...Limiter) *Multi {
-	return &Multi{limiters: limiters}
+	m := &Multi{limiters: limiters}
+	checkers := make([]ResultLimiter, 0, len(limiters))
+	for _, l := range limiters {
+		rl, ok := l.(ResultLimiter)
+		if !ok {
+			return m
+		}
+		checkers = append(checkers, rl)
+	}
+	m.checkers = checkers
+	return m
 }
 
 // Allow checks if all limiters allow the request.
@@ -291,13 +342,45 @@ func (m *Multi) Allow() bool {
 }
 
 // AllowN checks if all limiters allow n requests.
-// Uses sequential consumption with rollback-safe ordering. The mutex
-// ensures no concurrent caller can observe an inconsistent state between
-// the individual limiter checks.
 func (m *Multi) AllowN(n int) bool {
+	if n <= 0 {
+		return false
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.checkers != nil {
+		if allowed, _, _ := m.checkAll(n); !allowed {
+			return false
+		}
+	}
+	return m.takeAll(n)
+}
+
+// checkAll reports whether every limiter would allow n requests without
+// consuming anything. When denied, wait is the longest RetryAfter reported.
+// Must be called with m.mu held and m.checkers non-nil.
+func (m *Multi) checkAll(n int) (allowed bool, wait time.Duration, err error) {
+	allowed = true
+	for _, c := range m.checkers {
+		r := c.CheckN(n)
+		if r.Allowed {
+			continue
+		}
+		// Limit is only trusted when set; a custom ResultLimiter may leave it 0.
+		if r.Limit > 0 && n > r.Limit {
+			return false, 0, ErrExceedsLimit
+		}
+		allowed = false
+		wait = max(wait, r.RetryAfter)
+	}
+	return allowed, wait, nil
+}
+
+// takeAll consumes n from each limiter, stopping at the first denial.
+// Must be called with m.mu held.
+func (m *Multi) takeAll(n int) bool {
 	for _, l := range m.limiters {
 		if !l.AllowN(n) {
 			return false
@@ -313,12 +396,39 @@ func (m *Multi) Wait(ctx context.Context) error {
 
 // WaitN waits for all limiters to allow n requests.
 func (m *Multi) WaitN(ctx context.Context, n int) error {
-	for _, l := range m.limiters {
-		if err := l.WaitN(ctx, n); err != nil {
+	if n <= 0 {
+		return ErrInvalidN
+	}
+
+	if m.checkers == nil {
+		for _, l := range m.limiters {
+			if err := l.WaitN(ctx, n); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for {
+		m.mu.Lock()
+		allowed, wait, err := m.checkAll(n)
+		if err != nil {
+			m.mu.Unlock()
+			return err
+		}
+		if allowed && m.takeAll(n) {
+			m.mu.Unlock()
+			return nil
+		}
+		m.mu.Unlock()
+
+		if wait <= 0 {
+			wait = time.Millisecond
+		}
+		if err := sleepCtx(ctx, wait); err != nil {
 			return err
 		}
 	}
-	return nil
 }
 
 // Reset resets all limiters.

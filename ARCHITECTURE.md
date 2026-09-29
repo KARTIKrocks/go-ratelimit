@@ -132,8 +132,10 @@ checking multiple limiters in sequence.
 ### IP Extraction Security
 
 `GetClientIP` uses only `RemoteAddr` by default, which cannot be spoofed.
-Proxy header trust is opt-in via `GetClientIPFromHeaders` or
-`TrustedProxyKeyFunc`, preventing IP spoofing attacks.
+Proxy header trust is opt-in via `GetClientIPFromHeaders`,
+`TrustedProxyKeyFunc` or `TrustedProxiesKeyFunc`. These read the rightmost
+`X-Forwarded-For` entries (the ones appended by your proxies), never the
+client-supplied leftmost entry, so clients cannot choose their own key.
 
 ### Memory Exhaustion Protection
 

@@ -64,6 +64,10 @@ func (lb *LeakyBucket) Allow() bool {
 
 // AllowN checks if n requests are allowed.
 func (lb *LeakyBucket) AllowN(n int) bool {
+	if validateN(n, lb.capacity) != nil {
+		return false
+	}
+
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
 
@@ -83,6 +87,10 @@ func (lb *LeakyBucket) Wait(ctx context.Context) error {
 
 // WaitN blocks until n requests are allowed.
 func (lb *LeakyBucket) WaitN(ctx context.Context, n int) error {
+	if err := validateN(n, lb.capacity); err != nil {
+		return err
+	}
+
 	for {
 		lb.mu.Lock()
 		lb.leak()
@@ -125,6 +133,10 @@ func (lb *LeakyBucket) Check() Result {
 
 // CheckN returns the state for n requests without consuming.
 func (lb *LeakyBucket) CheckN(n int) Result {
+	if validateN(n, lb.capacity) != nil {
+		return Result{Limit: lb.capacity}
+	}
+
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
 
@@ -153,6 +165,10 @@ func (lb *LeakyBucket) Take() Result {
 
 // TakeN consumes n tokens and returns the result.
 func (lb *LeakyBucket) TakeN(n int) Result {
+	if validateN(n, lb.capacity) != nil {
+		return Result{Limit: lb.capacity}
+	}
+
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
 
@@ -318,6 +334,10 @@ func (klb *KeyedLeakyBucket) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (klb *KeyedLeakyBucket) AllowN(key string, n int) bool {
+	if validateN(n, klb.capacity) != nil {
+		return false
+	}
+
 	klb.mu.Lock()
 	defer klb.mu.Unlock()
 
@@ -341,6 +361,10 @@ func (klb *KeyedLeakyBucket) Wait(ctx context.Context, key string) error {
 
 // WaitN blocks until n requests for the key are allowed.
 func (klb *KeyedLeakyBucket) WaitN(ctx context.Context, key string, n int) error {
+	if err := validateN(n, klb.capacity); err != nil {
+		return err
+	}
+
 	for {
 		klb.mu.Lock()
 		entry := klb.getOrCreate(key)
@@ -395,6 +419,10 @@ func (klb *KeyedLeakyBucket) Take(key string) Result {
 
 // TakeN consumes n tokens for the key and returns the result.
 func (klb *KeyedLeakyBucket) TakeN(key string, n int) Result {
+	if validateN(n, klb.capacity) != nil {
+		return Result{Limit: klb.capacity}
+	}
+
 	klb.mu.Lock()
 	defer klb.mu.Unlock()
 
@@ -429,6 +457,10 @@ func (klb *KeyedLeakyBucket) Check(key string) Result {
 
 // CheckN returns the state for n tokens without consuming.
 func (klb *KeyedLeakyBucket) CheckN(key string, n int) Result {
+	if validateN(n, klb.capacity) != nil {
+		return Result{Limit: klb.capacity}
+	}
+
 	klb.mu.Lock()
 	defer klb.mu.Unlock()
 
