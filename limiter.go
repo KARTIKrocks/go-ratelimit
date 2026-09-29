@@ -311,8 +311,10 @@ func (s *MemoryStore) Close() {
 // does not implement ResultLimiter, Multi falls back to consuming from each
 // limiter in turn and cannot undo earlier consumption.
 //
-// A mutex serializes AllowN/WaitN across callers of the same Multi. The
-// guarantee only holds if the wrapped limiters are not also used directly.
+// A mutex serializes AllowN, and each check-then-take step of WaitN, across
+// callers of the same Multi. The fallback WaitN does not hold it, since it
+// blocks inside the wrapped limiters. The guarantee only holds if the wrapped
+// limiters are not also used directly.
 type Multi struct {
 	limiters []Limiter
 	checkers []ResultLimiter // nil unless every limiter is a ResultLimiter
