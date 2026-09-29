@@ -98,7 +98,7 @@ func TestKeyedTokenBucket_Reset(t *testing.T) {
 	limiter := NewKeyedTokenBucket(10.0, 5, time.Minute)
 	defer limiter.Close()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow("key1")
 	}
 	if limiter.Allow("key1") {
@@ -219,7 +219,7 @@ func TestKeyedLeakyBucket_Reset(t *testing.T) {
 	limiter := NewKeyedLeakyBucket(10.0, 5, time.Minute)
 	defer limiter.Close()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow("key1")
 	}
 	if limiter.Allow("key1") {
@@ -696,8 +696,8 @@ func TestMiddlewareFunc_Basic(t *testing.T) {
 	}))
 
 	// First 2 should pass
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest("GET", "/test", nil)
+	for i := range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -706,7 +706,7 @@ func TestMiddlewareFunc_Basic(t *testing.T) {
 	}
 
 	// Third should fail
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
@@ -725,7 +725,7 @@ func TestMiddlewareFunc_SkipFunc(t *testing.T) {
 
 	// Health check should be skipped even after exhaustion
 	limiter.Allow() // exhaust
-	req := httptest.NewRequest("GET", "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
@@ -745,13 +745,13 @@ func TestMiddleware_WithStatusCode(t *testing.T) {
 	}))
 
 	// Exhaust
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
 	// Next should get custom status code
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -771,7 +771,7 @@ func TestMiddleware_WithHeaders_Disabled(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -782,7 +782,7 @@ func TestMiddleware_WithHeaders_Disabled(t *testing.T) {
 }
 
 func TestDefaultOnLimitReached(t *testing.T) {
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
 	DefaultOnLimitReached(w, req, Result{Allowed: false})
@@ -795,7 +795,7 @@ func TestDefaultOnLimitReached(t *testing.T) {
 // --- Key function tests ---
 
 func TestPathKeyFunc(t *testing.T) {
-	req := httptest.NewRequest("GET", "/api/v1/users", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	key := PathKeyFunc(req)
 	if key != "/api/v1/users" {
 		t.Errorf("expected /api/v1/users, got %s", key)
@@ -803,7 +803,7 @@ func TestPathKeyFunc(t *testing.T) {
 }
 
 func TestMethodPathKeyFunc(t *testing.T) {
-	req := httptest.NewRequest("POST", "/api/v1/users", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", nil)
 	key := MethodPathKeyFunc(req)
 	if key != "POST:/api/v1/users" {
 		t.Errorf("expected POST:/api/v1/users, got %s", key)
@@ -811,7 +811,7 @@ func TestMethodPathKeyFunc(t *testing.T) {
 }
 
 func TestIPPathKeyFunc(t *testing.T) {
-	req := httptest.NewRequest("GET", "/api/v1/users", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	req.RemoteAddr = testPrivateAddr
 	key := IPPathKeyFunc(req)
 	if key != "192.168.1.1:/api/v1/users" {
@@ -821,7 +821,7 @@ func TestIPPathKeyFunc(t *testing.T) {
 
 func TestCompositeKeyFunc(t *testing.T) {
 	fn := CompositeKeyFunc(IPKeyFunc, PathKeyFunc)
-	req := httptest.NewRequest("GET", "/api", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api", nil)
 	req.RemoteAddr = "10.0.0.1:5000"
 	key := fn(req)
 	if key != "10.0.0.1:/api" {
@@ -834,7 +834,7 @@ func TestUserIDKeyFunc(t *testing.T) {
 	fn := UserIDKeyFunc(ctxKey("uid"))
 
 	// With user ID in context
-	req := httptest.NewRequest("GET", "/api", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api", nil)
 	ctx := context.WithValue(req.Context(), ctxKey("uid"), "user42")
 	req = req.WithContext(ctx)
 	key := fn(req)
@@ -843,7 +843,7 @@ func TestUserIDKeyFunc(t *testing.T) {
 	}
 
 	// Without user ID, falls back to IP
-	req2 := httptest.NewRequest("GET", "/api", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api", nil)
 	req2.RemoteAddr = "10.0.0.1:5000"
 	key2 := fn(req2)
 	if key2 != "10.0.0.1" {
@@ -865,7 +865,7 @@ func TestSkipPrivateIPs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.RemoteAddr = tt.ip
 		if got := SkipPrivateIPs(req); got != tt.expected {
 			t.Errorf("SkipPrivateIPs(%s) = %v, want %v", tt.ip, got, tt.expected)
@@ -876,12 +876,12 @@ func TestSkipPrivateIPs(t *testing.T) {
 func TestSkipMethods(t *testing.T) {
 	skip := SkipMethods("OPTIONS", "HEAD")
 
-	req := httptest.NewRequest("OPTIONS", "/test", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/test", nil)
 	if !skip(req) {
 		t.Error("should skip OPTIONS")
 	}
 
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	if skip(req) {
 		t.Error("should not skip GET")
 	}
@@ -890,12 +890,12 @@ func TestSkipMethods(t *testing.T) {
 func TestSkipPaths(t *testing.T) {
 	skip := SkipPaths("/metrics", "/debug")
 
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	if !skip(req) {
 		t.Error("should skip /metrics")
 	}
 
-	req = httptest.NewRequest("GET", "/api", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api", nil)
 	if skip(req) {
 		t.Error("should not skip /api")
 	}
@@ -905,21 +905,21 @@ func TestSkipIf(t *testing.T) {
 	skip := SkipIf(SkipHealthChecks, SkipPrivateIPs)
 
 	// Health check from public IP
-	req := httptest.NewRequest("GET", "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.RemoteAddr = "8.8.8.8:1234"
 	if !skip(req) {
 		t.Error("should skip health check")
 	}
 
 	// Non-health from private IP
-	req = httptest.NewRequest("GET", "/api", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	if !skip(req) {
 		t.Error("should skip private IP")
 	}
 
 	// Non-health from public IP
-	req = httptest.NewRequest("GET", "/api", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api", nil)
 	req.RemoteAddr = "8.8.8.8:1234"
 	if skip(req) {
 		t.Error("should not skip")
@@ -938,7 +938,7 @@ func TestHandler(t *testing.T) {
 
 	h := Handler(inner, limiter)
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -955,7 +955,7 @@ func TestHandlerFunc(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}, limiter)
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	fn(w, req)
@@ -975,7 +975,7 @@ func TestWaitMiddleware(t *testing.T) {
 	}))
 
 	// First request passes
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -984,7 +984,7 @@ func TestWaitMiddleware(t *testing.T) {
 	}
 
 	// Second request waits and succeeds (high rate)
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -1002,13 +1002,13 @@ func TestWaitMiddleware_Timeout(t *testing.T) {
 	}))
 
 	// Exhaust
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
 	// Second should timeout
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testRemoteAddr
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)

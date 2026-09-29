@@ -14,7 +14,7 @@ func TestInstrumented_RecordsAllowed(t *testing.T) {
 
 	inst := metrics.NewInstrumented(limiter, "test-allowed")
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		result := inst.Take("user1")
 		if !result.Allowed {
 			t.Errorf("request %d: expected Allowed=true, got false", i)
@@ -37,12 +37,12 @@ func TestInstrumented_RecordsDenied(t *testing.T) {
 	inst := metrics.NewInstrumented(limiter, "test-denied")
 
 	// Exhaust all 10 tokens in the bucket
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		inst.Take("user1")
 	}
 
 	// Next requests should be denied
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result := inst.Take("user1")
 		if result.Allowed {
 			t.Errorf("denied request %d: expected Allowed=false, got true", i)
@@ -78,7 +78,7 @@ func TestSimpleInstrumented_RecordsAllowed(t *testing.T) {
 
 	inst := metrics.NewSimpleInstrumented(limiter, "simple-allowed")
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		result := inst.Take()
 		if !result.Allowed {
 			t.Errorf("request %d: expected Allowed=true, got false", i)
@@ -100,12 +100,12 @@ func TestSimpleInstrumented_RecordsDenied(t *testing.T) {
 	inst := metrics.NewSimpleInstrumented(limiter, "simple-denied")
 
 	// Exhaust all 10 tokens in the bucket
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		inst.Take()
 	}
 
 	// Next requests should be denied
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result := inst.Take()
 		if result.Allowed {
 			t.Errorf("denied request %d: expected Allowed=false, got true", i)

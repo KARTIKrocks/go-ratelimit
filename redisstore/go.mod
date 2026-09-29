@@ -1,6 +1,6 @@
 module github.com/KARTIKrocks/go-ratelimit/redisstore
 
-go 1.26
+go 1.27
 
 require (
 	github.com/KARTIKrocks/go-ratelimit v0.0.0

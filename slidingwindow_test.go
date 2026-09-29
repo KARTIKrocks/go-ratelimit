@@ -9,7 +9,7 @@ import (
 func TestSlidingWindow_Allow(t *testing.T) {
 	limiter := NewSlidingWindow(5, time.Second)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -40,7 +40,7 @@ func TestSlidingWindow_SlidingBehavior(t *testing.T) {
 	limiter := NewSlidingWindow(3, 100*time.Millisecond)
 
 	// Exhaust limit
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -93,7 +93,7 @@ func TestSlidingWindow_Take(t *testing.T) {
 	}
 
 	// Exhaust remaining
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		limiter.Take()
 	}
 
@@ -113,7 +113,7 @@ func TestSlidingWindow_Reset(t *testing.T) {
 	limiter := NewSlidingWindow(5, time.Second)
 
 	// Exhaust tokens
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow()
 	}
 
@@ -134,10 +134,8 @@ func TestSlidingWindow_Concurrent(t *testing.T) {
 	var allowed, denied int
 	var mu sync.Mutex
 
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			if limiter.Allow() {
 				mu.Lock()
 				allowed++
@@ -147,7 +145,7 @@ func TestSlidingWindow_Concurrent(t *testing.T) {
 				denied++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -163,7 +161,7 @@ func TestSlidingWindow_Concurrent(t *testing.T) {
 func TestSlidingWindowCounter_Allow(t *testing.T) {
 	limiter := NewSlidingWindowCounter(5, time.Second)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -217,7 +215,7 @@ func TestSlidingWindowCounter_Take(t *testing.T) {
 	}
 
 	// Exhaust remaining
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		limiter.Take()
 	}
 
@@ -234,7 +232,7 @@ func TestSlidingWindowCounter_Reset(t *testing.T) {
 	limiter := NewSlidingWindowCounter(5, time.Second)
 
 	// Exhaust tokens
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow()
 	}
 
@@ -255,10 +253,8 @@ func TestSlidingWindowCounter_Concurrent(t *testing.T) {
 	var allowed, denied int
 	var mu sync.Mutex
 
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			if limiter.Allow() {
 				mu.Lock()
 				allowed++
@@ -268,7 +264,7 @@ func TestSlidingWindowCounter_Concurrent(t *testing.T) {
 				denied++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -286,7 +282,7 @@ func TestKeyedSlidingWindow_MultipleKeys(t *testing.T) {
 	defer limiter.Close()
 
 	// Different keys should have independent limits
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow("key1") {
 			t.Errorf("key1 request %d should be allowed", i)
 		}

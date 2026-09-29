@@ -4,21 +4,55 @@ run:
   timeout: 5m
   tests: true
 
+# Report every occurrence. The defaults (max-same-issues: 3) hide duplicates,
+# which makes a lint failure look smaller than it is.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 linters:
   enable:
     - errcheck
     - govet
     - staticcheck
     - unused
+    - ineffassign
     - misspell
     - unconvert
     - goconst
     - gocritic
     - gocyclo
     - revive
-
+    - prealloc
+    # Security scanning: limiters sit in front of untrusted traffic.
+    - gosec
+    # Error-handling discipline: %w-wrapped errors must be compared with
+    # errors.Is/As, and sentinel errors must be named Err*.
+    - errorlint
+    - errname
+    - nilerr
+    - nilnesserr
+    # Concurrency and context correctness.
+    - contextcheck
+    - fatcontext
+    - noctx
+    - bodyclose
+    - durationcheck
+    # Limiter hot paths are expected to stay allocation-light.
+    - perfsprint
+    - makezero
+    - wastedassign
+    # Correctness footguns.
+    - asasalint
+    - reassign
+    - usestdlibvars
+    - copyloopvar
+    - intrange
+    # Keep //nolint directives specific and explained.
+    - nolintlint
   settings:
     errcheck:
+      # An unchecked type assertion panics; deliberate `_ =` discards still pass.
       check-type-assertions: true
     govet:
       enable:
@@ -34,19 +68,43 @@ linters:
           disabled: true
         - name: unused-parameter
           disabled: true
-
+    nolintlint:
+      require-explanation: true
+      require-specific: true
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - gocyclo
+          - goconst
           - errcheck
+          # Tests may assert on unwrapped errors, build requests without a
+          # context, skip body cleanup and use fmt for convenience; none of
+          # that ships to consumers.
+          - bodyclose
+          - errorlint
+          - gosec
+          - intrange
+          - noctx
+          - perfsprint
+      # G101 misfires on Lua scripts containing words like "tokens".
+      - path: redisstore/redisstore\.go
+        text: G101
+        linters:
+          - gosec
+      # Examples are illustrative and not part of the public API surface.
       - path: examples/
         linters:
           - errcheck
           - gocritic
           - govet
+          - gosec
+          - perfsprint
 
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true

@@ -9,6 +9,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// labelLimiter is the Prometheus label identifying the limiter instance.
+const labelLimiter = "limiter"
+
 // Stats holds rate limiter statistics.
 type Stats struct {
 	Allowed    uint64
@@ -185,7 +188,7 @@ func RegisterPrometheus(reg prometheus.Registerer) {
 			Name: "ratelimit_requests_total",
 			Help: "Total number of rate limit checks",
 		},
-		[]string{"limiter", "result"},
+		[]string{labelLimiter, "result"},
 	)
 
 	promRequestsAllowed = promauto.With(reg).NewCounterVec(
@@ -193,7 +196,7 @@ func RegisterPrometheus(reg prometheus.Registerer) {
 			Name: "ratelimit_requests_allowed_total",
 			Help: "Total number of allowed requests",
 		},
-		[]string{"limiter"},
+		[]string{labelLimiter},
 	)
 
 	promRequestsDenied = promauto.With(reg).NewCounterVec(
@@ -201,7 +204,7 @@ func RegisterPrometheus(reg prometheus.Registerer) {
 			Name: "ratelimit_requests_denied_total",
 			Help: "Total number of denied requests",
 		},
-		[]string{"limiter"},
+		[]string{labelLimiter},
 	)
 
 	promErrors = promauto.With(reg).NewCounterVec(
@@ -209,6 +212,6 @@ func RegisterPrometheus(reg prometheus.Registerer) {
 			Name: "ratelimit_errors_total",
 			Help: "Total number of rate limiter errors",
 		},
-		[]string{"limiter"},
+		[]string{labelLimiter},
 	)
 }

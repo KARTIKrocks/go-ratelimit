@@ -1,0 +1,44 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: go
+      # Submodules resolve the root module via `replace`, so a single pass over
+      # each module covers everything.
+      - name: Build
+        run: |
+          for m in . redisstore metrics; do
+            (cd "$m" && go build ./...)
+          done
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go"

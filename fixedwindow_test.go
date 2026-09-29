@@ -10,7 +10,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 	limiter := NewFixedWindow(5, time.Minute)
 
 	// Should allow up to limit
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -42,7 +42,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 	limiter := NewFixedWindow(5, 100*time.Millisecond)
 
 	// Exhaust the limit
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -75,7 +75,7 @@ func TestFixedWindow_Check(t *testing.T) {
 	}
 
 	// Consume all tokens
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow()
 	}
 
@@ -107,7 +107,7 @@ func TestFixedWindow_Take(t *testing.T) {
 	}
 
 	// Exhaust remaining
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		limiter.Take()
 	}
 
@@ -128,7 +128,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 	limiter := NewFixedWindow(5, time.Minute)
 
 	// Exhaust tokens
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.Allow()
 	}
 
@@ -149,10 +149,8 @@ func TestFixedWindow_Concurrent(t *testing.T) {
 	var allowed, denied int
 	var mu sync.Mutex
 
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			if limiter.Allow() {
 				mu.Lock()
 				allowed++
@@ -162,7 +160,7 @@ func TestFixedWindow_Concurrent(t *testing.T) {
 				denied++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -180,7 +178,7 @@ func TestKeyedFixedWindow_MultipleKeys(t *testing.T) {
 	defer limiter.Close()
 
 	// Different keys should have independent limits
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !limiter.Allow("key1") {
 			t.Errorf("key1 request %d should be allowed", i)
 		}
