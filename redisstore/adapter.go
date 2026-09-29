@@ -14,7 +14,42 @@ type RedisClientAdapter struct {
 
 // NewRedisClientAdapter creates a new Redis client adapter.
 func NewRedisClientAdapter(client *redis.Client) *RedisClientAdapter {
+	if client == nil {
+		panic("ratelimit: client must not be nil")
+	}
 	return &RedisClientAdapter{client: client}
+}
+
+// DeleteMatching deletes every key matching the glob pattern.
+func (a *RedisClientAdapter) DeleteMatching(ctx context.Context, pattern string) error {
+	return deleteMatching(ctx, a.client, pattern)
+}
+
+// deleteBatch is the SCAN page size and the number of UNLINKs per pipeline.
+const deleteBatch = 1000
+
+// deleteMatching scans one node and unlinks matching keys in pipelined
+// batches. Each UNLINK names a single key, so it also works on a Cluster
+// node, where a multi-key command across slots is rejected.
+func deleteMatching(ctx context.Context, c *redis.Client, pattern string) error {
+	iter := c.Scan(ctx, 0, pattern, deleteBatch).Iterator()
+	pipe := c.Pipeline()
+	for iter.Next(ctx) {
+		pipe.Unlink(ctx, iter.Val())
+		if pipe.Len() >= deleteBatch {
+			if _, err := pipe.Exec(ctx); err != nil {
+				return err
+			}
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
+	if pipe.Len() > 0 {
+		_, err := pipe.Exec(ctx)
+		return err
+	}
+	return nil
 }
 
 // Eval executes a Lua script.
@@ -59,7 +94,18 @@ type RedisClusterClientAdapter struct {
 
 // NewRedisClusterClientAdapter creates a new Redis cluster client adapter.
 func NewRedisClusterClientAdapter(client *redis.ClusterClient) *RedisClusterClientAdapter {
+	if client == nil {
+		panic("ratelimit: client must not be nil")
+	}
 	return &RedisClusterClientAdapter{client: client}
+}
+
+// DeleteMatching deletes every key matching the glob pattern on every
+// master node.
+func (a *RedisClusterClientAdapter) DeleteMatching(ctx context.Context, pattern string) error {
+	return a.client.ForEachMaster(ctx, func(ctx context.Context, master *redis.Client) error {
+		return deleteMatching(ctx, master, pattern)
+	})
 }
 
 // Eval executes a Lua script.

@@ -12,8 +12,11 @@ package redisstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	ratelimit "github.com/KARTIKrocks/go-ratelimit"
@@ -30,7 +33,20 @@ var (
 
 	_ RedisClient = (*RedisClientAdapter)(nil)
 	_ RedisClient = (*RedisClusterClientAdapter)(nil)
+	_ KeyDeleter  = (*RedisClientAdapter)(nil)
+	_ KeyDeleter  = (*RedisClusterClientAdapter)(nil)
 )
+
+// ErrResetAllUnsupported is reported to the error handler when ResetAll is
+// called with a client that does not implement KeyDeleter.
+var ErrResetAllUnsupported = errors.New("redisstore: client does not implement KeyDeleter, ResetAll is unsupported")
+
+// KeyDeleter is optionally implemented by a RedisClient to support ResetAll.
+// Both adapters in this package implement it.
+type KeyDeleter interface {
+	// DeleteMatching deletes every key matching the glob pattern.
+	DeleteMatching(ctx context.Context, pattern string) error
+}
 
 // RedisClient is the interface for Redis operations.
 type RedisClient interface {
@@ -235,10 +251,15 @@ func (l *redisLimiter) eval(ctx context.Context, key string, n int, consume bool
 		}
 	}
 
+	// Clamp rather than reject: remaining goes negative when the limit is
+	// lowered while Redis still holds a higher count, and rejecting would
+	// fail open. Bounding by l.limit also keeps the int conversion safe.
+	remaining := min(max(0, nums[1]), int64(l.limit))
+
 	result := ratelimit.Result{
 		Allowed:    nums[0] == 1,
 		Limit:      l.limit,
-		Remaining:  int(nums[1]),
+		Remaining:  int(remaining),
 		RetryAfter: time.Duration(nums[2]) * time.Millisecond,
 	}
 	if nums[3] > 0 {
@@ -333,9 +354,28 @@ func (l *redisLimiter) ResetCtx(ctx context.Context, key string) {
 	}
 }
 
-// ResetAll is a no-op: resetting every key would require a SCAN over the
-// keyspace, which can be expensive. Use Reset for individual keys.
-func (l *redisLimiter) ResetAll() {}
+// ResetAll resets every key of this limiter. See ResetAllCtx.
+func (l *redisLimiter) ResetAll() {
+	l.ResetAllCtx(context.Background())
+}
+
+// ResetAllCtx resets every key of this limiter by scanning for its key
+// prefix, which can be slow on large keyspaces. The client must implement
+// KeyDeleter; otherwise ErrResetAllUnsupported is reported to the error
+// handler and nothing is deleted.
+func (l *redisLimiter) ResetAllCtx(ctx context.Context) {
+	d, ok := l.client.(KeyDeleter)
+	if !ok {
+		l.report(ctx, ErrResetAllUnsupported)
+		return
+	}
+	if err := d.DeleteMatching(ctx, globEscaper.Replace(l.keyPrefix)+"*"); err != nil {
+		l.report(ctx, err)
+	}
+}
+
+// globEscaper escapes Redis glob metacharacters in a literal key prefix.
+var globEscaper = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`)
 
 // Check returns the current state for a key without consuming.
 func (l *redisLimiter) Check(key string) ratelimit.Result {
@@ -375,7 +415,7 @@ type RedisTokenBucket struct {
 // NewRedisTokenBucket creates a new Redis-backed token bucket limiter.
 // rate is in tokens per second.
 func NewRedisTokenBucket(client RedisClient, keyPrefix string, rate float64, burst int, opts ...Option) *RedisTokenBucket {
-	if client == nil {
+	if isNil(client) {
 		panic("ratelimit: client must not be nil")
 	}
 	if rate <= 0 {
@@ -431,7 +471,7 @@ func NewRedisFixedWindow(client RedisClient, keyPrefix string, limit int, window
 // Helper functions
 
 func validateWindowArgs(client RedisClient, limit int, window time.Duration) {
-	if client == nil {
+	if isNil(client) {
 		panic("ratelimit: client must not be nil")
 	}
 	if limit <= 0 {
@@ -440,6 +480,16 @@ func validateWindowArgs(client RedisClient, limit int, window time.Duration) {
 	if window < time.Millisecond {
 		panic("ratelimit: window must be at least 1ms")
 	}
+}
+
+// isNil reports whether c is nil or holds a nil pointer, which would pass a
+// plain nil check and panic on first use.
+func isNil(c RedisClient) bool {
+	if c == nil {
+		return true
+	}
+	v := reflect.ValueOf(c)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 // validateN mirrors the root package's validation of n.

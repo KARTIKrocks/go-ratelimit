@@ -117,6 +117,11 @@ func TestReplyParsing(t *testing.T) {
 			},
 		},
 		{
+			name:  "negative remaining after limit was lowered is clamped",
+			reply: []any{int64(0), int64(-3), int64(150), int64(0)},
+			want:  ratelimit.Result{Limit: 5, RetryAfter: 150 * time.Millisecond},
+		},
+		{
 			name:  "string reply from custom client",
 			reply: []any{"1", "4", "0", "0"},
 			want:  ratelimit.Result{Allowed: true, Limit: 5, Remaining: 4},
@@ -168,6 +173,53 @@ func TestConstructorPanics(t *testing.T) {
 		"zero rate":         func() { NewRedisTokenBucket(client, "p", 0, 1) },
 		"zero burst":        func() { NewRedisTokenBucket(client, "p", 1, 0) },
 		"zero per duration": func() { NewRedisTokenBucketPerDuration(client, "p", 1, 0, 1) },
+	}
+	for name, fn := range tests {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("expected panic")
+				}
+			}()
+			fn()
+		})
+	}
+}
+
+// deleterClient records the pattern passed to DeleteMatching.
+type deleterClient struct {
+	fakeClient
+	pattern string
+}
+
+func (c *deleterClient) DeleteMatching(_ context.Context, pattern string) error {
+	c.pattern = pattern
+	return c.err
+}
+
+func TestResetAllDeletesPrefix(t *testing.T) {
+	client := &deleterClient{}
+	NewRedisFixedWindow(client, "app*[1]", 5, time.Second).ResetAll()
+	if want := `app\*\[1\]:fw:*`; client.pattern != want {
+		t.Errorf("pattern = %q, want %q", client.pattern, want)
+	}
+}
+
+func TestResetAllUnsupportedIsReported(t *testing.T) {
+	var reported error
+	l := NewRedisFixedWindow(&fakeClient{}, "p", 5, time.Second,
+		WithErrorHandler(func(err error) { reported = err }))
+	l.ResetAll()
+	if !errors.Is(reported, ErrResetAllUnsupported) {
+		t.Errorf("reported %v, want ErrResetAllUnsupported", reported)
+	}
+}
+
+func TestTypedNilClientPanics(t *testing.T) {
+	tests := map[string]func(){
+		"typed nil adapter":   func() { NewRedisFixedWindow((*RedisClientAdapter)(nil), "p", 1, time.Second) },
+		"nil go-redis client": func() { NewRedisClientAdapter(nil) },
+		"nil cluster client":  func() { NewRedisClusterClientAdapter(nil) },
 	}
 	for name, fn := range tests {
 		t.Run(name, func(t *testing.T) {

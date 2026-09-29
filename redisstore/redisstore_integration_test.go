@@ -182,3 +182,24 @@ func TestIntegrationSlidingWindowWeightsPreviousWindow(t *testing.T) {
 		t.Error("previous window count was not carried over")
 	}
 }
+
+func TestIntegrationResetAll(t *testing.T) {
+	client, prefix := newTestClient(t)
+	l := NewRedisFixedWindow(client, prefix, 1, time.Hour, failOnError(t))
+	other := NewRedisFixedWindow(client, prefix+"-other", 1, time.Hour, failOnError(t))
+
+	for _, k := range []string{"a", "b", "c"} {
+		l.Allow(k)
+	}
+	other.Allow("a")
+
+	l.ResetAll()
+	for _, k := range []string{"a", "b", "c"} {
+		if !l.Allow(k) {
+			t.Errorf("key %q still limited after ResetAll", k)
+		}
+	}
+	if other.Allow("a") {
+		t.Error("ResetAll deleted another limiter's keys")
+	}
+}

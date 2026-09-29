@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `redisstore.WithFailClosed()` to deny requests on Redis errors, and
   `redisstore.WithErrorHandler(fn)` to log or count them. Redis constructors
   accept these as optional trailing arguments.
+- `redisstore` limiters implement `ResetAll` (and `ResetAllCtx`), which was a
+  silent no-op. It needs a client implementing the new optional `KeyDeleter`
+  interface; both built-in adapters do, including on Redis Cluster. Other
+  clients get `ErrResetAllUnsupported` through the error handler.
 
 ### Changed
 
@@ -58,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `redisstore` windows under 1s no longer panic in `Reset`, and fractional
   windows (e.g. 1.5s) no longer make `Reset` delete the wrong key or make every
   request fail open
+- `redisstore` constructors and adapters reject nil clients, including a nil
+  pointer stored in the `RedisClient` interface, instead of panicking on first use
 - `redisstore` limiters validate `n` like the in-memory limiters and no longer
   call Redis for invalid `n`
 
