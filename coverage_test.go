@@ -1021,7 +1021,7 @@ func TestWaitMiddleware_Timeout(t *testing.T) {
 
 func BenchmarkLeakyBucket_Allow(b *testing.B) {
 	limiter := NewLeakyBucket(1000000.0, 1000000)
-	
+
 	for b.Loop() {
 		limiter.Allow()
 	}
@@ -1039,7 +1039,7 @@ func BenchmarkLeakyBucket_AllowParallel(b *testing.B) {
 
 func BenchmarkFixedWindow_Allow(b *testing.B) {
 	limiter := NewFixedWindow(1000000, time.Hour)
-	
+
 	for b.Loop() {
 		limiter.Allow()
 	}
@@ -1057,7 +1057,7 @@ func BenchmarkFixedWindow_AllowParallel(b *testing.B) {
 
 func BenchmarkSlidingWindow_Allow(b *testing.B) {
 	limiter := NewSlidingWindow(1000000, time.Hour)
-	
+
 	for b.Loop() {
 		limiter.Allow()
 	}
@@ -1065,7 +1065,7 @@ func BenchmarkSlidingWindow_Allow(b *testing.B) {
 
 func BenchmarkSlidingWindowCounter_Allow(b *testing.B) {
 	limiter := NewSlidingWindowCounter(1000000, time.Hour)
-	
+
 	for b.Loop() {
 		limiter.Allow()
 	}
@@ -1084,7 +1084,7 @@ func BenchmarkSlidingWindowCounter_AllowParallel(b *testing.B) {
 func BenchmarkKeyedFixedWindow_Allow(b *testing.B) {
 	limiter := NewKeyedFixedWindow(1000000, time.Hour, time.Minute)
 	defer limiter.Close()
-	
+
 	for b.Loop() {
 		limiter.Allow("key")
 	}
@@ -1093,7 +1093,7 @@ func BenchmarkKeyedFixedWindow_Allow(b *testing.B) {
 func BenchmarkKeyedSlidingWindow_Allow(b *testing.B) {
 	limiter := NewKeyedSlidingWindow(1000000, time.Hour, time.Minute)
 	defer limiter.Close()
-	
+
 	for b.Loop() {
 		limiter.Allow("key")
 	}
@@ -1102,7 +1102,7 @@ func BenchmarkKeyedSlidingWindow_Allow(b *testing.B) {
 func BenchmarkKeyedLeakyBucket_Allow(b *testing.B) {
 	limiter := NewKeyedLeakyBucket(1000000.0, 1000000, time.Minute)
 	defer limiter.Close()
-	
+
 	for b.Loop() {
 		limiter.Allow("key")
 	}

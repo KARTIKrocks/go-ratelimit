@@ -368,7 +368,6 @@ func BenchmarkMiddleware(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 
-	
 	for b.Loop() {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
