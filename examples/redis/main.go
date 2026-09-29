@@ -76,18 +76,18 @@ func dataHandler(w http.ResponseWriter, r *http.Request) {
 
 func statsHandler(limiter *redisstore.RedisTokenBucket) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get client IP
-		ip := ratelimit.GetClientIP(r)
+		// Use the same key as the middleware (IPv6 clients are keyed by /64)
+		key := ratelimit.IPKeyFunc(r)
 
 		// Check current state
-		result := limiter.Check(ip)
+		result := limiter.Check(key)
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{
-			"ip": "%s",
+			"key": "%s",
 			"limit": %d,
 			"remaining": %d,
 			"allowed": %v
-		}`, ip, result.Limit, result.Remaining, result.Allowed)
+		}`, key, result.Limit, result.Remaining, result.Allowed)
 	}
 }
