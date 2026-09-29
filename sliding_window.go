@@ -68,7 +68,7 @@ func (sw *SlidingWindow) AllowN(n int) bool {
 	sw.cleanup(now)
 
 	if len(sw.timestamps)+n <= sw.limit {
-		for i := 0; i < n; i++ {
+		for range n {
 			sw.timestamps = append(sw.timestamps, now)
 		}
 		return true
@@ -89,7 +89,7 @@ func (sw *SlidingWindow) WaitN(ctx context.Context, n int) error {
 		sw.cleanup(now)
 
 		if len(sw.timestamps)+n <= sw.limit {
-			for i := 0; i < n; i++ {
+			for range n {
 				sw.timestamps = append(sw.timestamps, now)
 			}
 			sw.mu.Unlock()
@@ -177,7 +177,7 @@ func (sw *SlidingWindow) TakeN(n int) Result {
 	}
 
 	if len(sw.timestamps)+n <= sw.limit {
-		for i := 0; i < n; i++ {
+		for range n {
 			sw.timestamps = append(sw.timestamps, now)
 		}
 		result.Allowed = true

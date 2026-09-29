@@ -57,7 +57,7 @@ func TestMulti_Reset(t *testing.T) {
 	multi := NewMulti(l1, l2)
 
 	// Exhaust both limiters
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		multi.Allow()
 	}
 

@@ -155,22 +155,22 @@ func TestCollector_Concurrent(t *testing.T) {
 
 	wg.Add(goroutines * 3)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				c.RecordAllowed("concurrent")
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				c.RecordDenied("concurrent")
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				c.RecordError("concurrent")
 			}
 		}()

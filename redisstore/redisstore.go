@@ -169,7 +169,7 @@ func (rtb *RedisTokenBucket) Reset(key string) {
 
 // ResetCtx resets the limiter for the given key with a context.
 func (rtb *RedisTokenBucket) ResetCtx(ctx context.Context, key string) {
-	rtb.client.Del(ctx, rtb.key(key))
+	_ = rtb.client.Del(ctx, rtb.key(key))
 }
 
 // ResetAll cannot reset all keys efficiently in Redis (would require scanning).
@@ -378,7 +378,7 @@ func (rsw *RedisSlidingWindow) ResetCtx(ctx context.Context, key string) {
 	window := int64(rsw.window.Seconds())
 	currKey := fmt.Sprintf("%s:%d", rsw.key(key), now/window)
 	prevKey := fmt.Sprintf("%s:%d", rsw.key(key), now/window-1)
-	rsw.client.Del(ctx, currKey, prevKey)
+	_ = rsw.client.Del(ctx, currKey, prevKey)
 }
 
 // ResetAll cannot reset all keys efficiently.
@@ -582,7 +582,7 @@ func (rfw *RedisFixedWindow) ResetCtx(ctx context.Context, key string) {
 	now := time.Now().Unix()
 	window := int64(rfw.window.Seconds())
 	windowKey := fmt.Sprintf("%s:%d", rfw.key(key), now/window)
-	rfw.client.Del(ctx, windowKey)
+	_ = rfw.client.Del(ctx, windowKey)
 }
 
 // ResetAll cannot reset all keys efficiently.

@@ -11,7 +11,7 @@ func TestLeakyBucket_Allow(t *testing.T) {
 	limiter := NewLeakyBucket(100.0, 10)
 
 	// Should allow adding water up to capacity
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if !limiter.Allow() {
 			t.Errorf("Request %d should be allowed", i)
 		}
@@ -68,7 +68,7 @@ func TestLeakyBucket_Wait(t *testing.T) {
 	limiter := NewLeakyBucket(100.0, 10)
 
 	// Exhaust capacity
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		limiter.Allow()
 	}
 
@@ -155,7 +155,7 @@ func TestLeakyBucket_Reset(t *testing.T) {
 	limiter := NewLeakyBucket(100.0, 10)
 
 	// Fill the bucket
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		limiter.Allow()
 	}
 
@@ -173,10 +173,8 @@ func TestLeakyBucket_Concurrent(t *testing.T) {
 	var allowed, denied int
 	var mu sync.Mutex
 
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			if limiter.Allow() {
 				mu.Lock()
 				allowed++
@@ -186,7 +184,7 @@ func TestLeakyBucket_Concurrent(t *testing.T) {
 				denied++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -204,7 +202,7 @@ func TestKeyedLeakyBucket_MultipleKeys(t *testing.T) {
 	defer limiter.Close()
 
 	// Different keys should have independent limits
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if !limiter.Allow("key1") {
 			t.Errorf("key1 request %d should be allowed", i)
 		}

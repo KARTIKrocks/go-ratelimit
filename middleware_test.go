@@ -17,8 +17,8 @@ func TestMiddleware_Basic(t *testing.T) {
 	}))
 
 	// First 5 requests should succeed
-	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest("GET", "/test", nil)
+	for i := range 5 {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.RemoteAddr = testPrivateAddr
 		w := httptest.NewRecorder()
 
@@ -30,7 +30,7 @@ func TestMiddleware_Basic(t *testing.T) {
 	}
 
 	// Next request should be rate limited
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 	w := httptest.NewRecorder()
 
@@ -53,8 +53,8 @@ func TestMiddleware_DifferentIPs(t *testing.T) {
 	ips := []string{testPrivateAddr, "192.168.1.2:1234", "192.168.1.3:1234"}
 
 	for _, ip := range ips {
-		for i := 0; i < 2; i++ {
-			req := httptest.NewRequest("GET", "/test", nil)
+		for i := range 2 {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.RemoteAddr = ip
 			w := httptest.NewRecorder()
 
@@ -66,7 +66,7 @@ func TestMiddleware_DifferentIPs(t *testing.T) {
 		}
 
 		// Third request should be limited
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.RemoteAddr = ip
 		w := httptest.NewRecorder()
 
@@ -86,7 +86,7 @@ func TestMiddleware_Headers(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 	w := httptest.NewRecorder()
 
@@ -115,8 +115,8 @@ func TestMiddleware_SkipHealthChecks(t *testing.T) {
 	healthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/live", "/livez", "/ping"}
 
 	for _, path := range healthPaths {
-		for i := 0; i < 10; i++ {
-			req := httptest.NewRequest("GET", path, nil)
+		for i := range 10 {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
 			req.RemoteAddr = testPrivateAddr
 			w := httptest.NewRecorder()
 
@@ -140,8 +140,8 @@ func TestMiddleware_CustomKeyFunc(t *testing.T) {
 	}))
 
 	// Same API key should share limit
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest("GET", "/test", nil)
+	for i := range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("X-API-Key", "key123")
 		w := httptest.NewRecorder()
 
@@ -153,7 +153,7 @@ func TestMiddleware_CustomKeyFunc(t *testing.T) {
 	}
 
 	// Third request should be limited
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-API-Key", "key123")
 	w := httptest.NewRecorder()
 
@@ -164,7 +164,7 @@ func TestMiddleware_CustomKeyFunc(t *testing.T) {
 	}
 
 	// Different API key should have independent limit
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-API-Key", "key456")
 	w = httptest.NewRecorder()
 
@@ -186,13 +186,13 @@ func TestMiddleware_JSONOnLimitReached(t *testing.T) {
 	}))
 
 	// Exhaust limit
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
 	// Next request should return JSON error
-	req = httptest.NewRequest("GET", "/test", nil)
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -221,8 +221,8 @@ func TestPathLimiter(t *testing.T) {
 	}))
 
 	// Normal path should allow 5 requests
-	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest("GET", "/api/normal", nil)
+	for i := range 5 {
+		req := httptest.NewRequest(http.MethodGet, "/api/normal", nil)
 		req.RemoteAddr = testPrivateAddr
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
@@ -233,7 +233,7 @@ func TestPathLimiter(t *testing.T) {
 	}
 
 	// Strict path should only allow 1 request
-	req := httptest.NewRequest("GET", "/api/strict", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/strict", nil)
 	req.RemoteAddr = testPrivateAddr
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -242,7 +242,7 @@ func TestPathLimiter(t *testing.T) {
 		t.Errorf("Strict path first request: expected 200, got %d", w.Code)
 	}
 
-	req = httptest.NewRequest("GET", "/api/strict", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/strict", nil)
 	req.RemoteAddr = testPrivateAddr
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -281,7 +281,7 @@ func TestGetClientIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.RemoteAddr = tt.remoteAddr
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
@@ -335,7 +335,7 @@ func TestGetClientIPFromHeaders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.RemoteAddr = tt.remoteAddr
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
@@ -357,7 +357,7 @@ func BenchmarkMiddleware(b *testing.B) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = testPrivateAddr
 
 	b.ResetTimer()

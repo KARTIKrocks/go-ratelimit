@@ -222,15 +222,13 @@ func TestMemoryStore_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Run concurrent increments on the same key
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			_, err := store.Increment(ctx, "key1", time.Minute)
 			if err != nil {
 				t.Errorf("Increment failed: %v", err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

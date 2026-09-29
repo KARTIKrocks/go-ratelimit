@@ -6,85 +6,88 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+# Supersede an in-flight run when a PR is pushed to again. Runs on main are
+# never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
-    name: Test
+    name: test (root, ${{ matrix.label }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        go: ["1.24", "1.25", "1.26"]
-
+        include:
+          # go-version-file self-tracks the floor declared in go.mod.
+          - { label: floor, go-version-file: go.mod }
+          # `stable` resolves to the current Go release at run time.
+          - { label: stable, go-version: stable }
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: ${{ matrix.go }}
+          go-version: ${{ matrix.go-version }}
+          go-version-file: ${{ matrix.go-version-file }}
+          check-latest: true
+      - run: go test -race -count=1 ./...
 
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Get dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: unittests
-          name: codecov-umbrella
-
-  lint:
-    name: Lint
+  # The root module's ./... stops at nested go.mod boundaries, so the redis
+  # store and metrics get no signal from the `test` job. Both resolve the root
+  # module through a `replace` directive, so they always test the working tree.
+  submodules:
+    name: test (${{ matrix.module }}, ${{ matrix.label }})
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { module: redisstore, label: floor, go-version-file: redisstore/go.mod }
+          - { module: redisstore, label: stable, go-version: stable }
+          - { module: metrics, label: floor, go-version-file: metrics/go.mod }
+          - { module: metrics, label: stable, go-version: stable }
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version: ${{ matrix.go-version }}
+          go-version-file: ${{ matrix.go-version-file }}
+          check-latest: true
+      - name: Vet
+        working-directory: ${{ matrix.module }}
+        run: go vet ./...
+      - name: Test
+        working-directory: ${{ matrix.module }}
+        run: go test -race -count=1 ./...
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: latest
-
-  benchmark:
-    name: Benchmark
+  # Examples are their own modules and ship no tests; a build catches API drift.
+  examples:
+    name: build (${{ matrix.module }})
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [examples/basic, examples/multitier, examples/redis, examples/prometheus]
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
-
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Run benchmarks
-        # run: go test -bench=. -benchmem ./... | tee benchmark.txt
-        run: go test -bench=. -benchmem ./...
-
-      # - name: Store benchmark result
-      #   uses: benchmark-action/github-action-benchmark@v1
-      #   with:
-      #     tool: "go"
-      #     output-file-path: benchmark.txt
-      #     github-token: ${{ secrets.GITHUB_TOKEN }}
-      #     auto-push: false
-      #     save-data-file: false
-      #     skip-fetch-gh-pages: true
+          go-version: stable
+          check-latest: true
+      - working-directory: ${{ matrix.module }}
+        run: go build ./...
 
   integration:
-    name: Integration Tests
+    name: integration (redis)
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     services:
       redis:
         image: redis:7-alpine
@@ -95,17 +98,114 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
-
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Run integration tests
+          go-version: stable
+          check-latest: true
+      - run: go test -v -tags=integration ./...
+        env:
+          REDIS_URL: localhost:6379
+      - working-directory: redisstore
         run: go test -v -tags=integration ./...
         env:
           REDIS_URL: localhost:6379
+
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - uses: codecov/codecov-action@v7
+        with:
+          files: coverage.txt
+          flags: unittests
+          fail_ci_if_error: false
+
+  lint:
+    name: lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", redisstore, metrics]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      # Version comes from the Makefile so `make lint` and this gate run the
+      # same linter. Refresh GOLANGCI_LINT_VERSION deliberately.
+      - name: Resolve golangci-lint version
+        id: golangci-lint-version
+        run: echo "version=$(make -s print-golangci-lint-version)" >> "$GITHUB_OUTPUT"
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.golangci-lint-version.outputs.version }}
+          args: --timeout=5m
+          working-directory: ${{ matrix.module }}
+
+  # govulncheck reports only advisories this code actually reaches, which makes
+  # it quiet enough to gate a merge on. Scanned per module because the root
+  # module's ./... stops at nested go.mod boundaries.
+  vuln:
+    name: govulncheck (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", redisstore, metrics]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Install govulncheck
+        run: go install "golang.org/x/vuln/cmd/govulncheck@$(make -s print-govulncheck-version)"
+      - name: Scan
+        working-directory: ${{ matrix.module }}
+        run: govulncheck ./...
+
+  # THE ONLY JOB THAT SHOULD BE A REQUIRED STATUS CHECK. Matrix job names embed
+  # matrix values, so requiring them directly breaks when the matrix changes.
+  # `if: always()` is load-bearing: a skipped required check counts as passing.
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [test, submodules, examples, integration, coverage, lint, vuln]
+    steps:
+      - name: Verify every job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          if echo "$NEEDS" | jq -e 'any(.[]; .result != "success")' >/dev/null; then
+            echo "::error::one or more CI jobs did not succeed"
+            exit 1
+          fi
+          echo "all jobs succeeded"
+
+  # Not part of the `ci` gate: runs only on main.
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - run: go test -bench=. -benchmem -run='^$' ./...
