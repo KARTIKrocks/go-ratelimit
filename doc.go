@@ -61,7 +61,7 @@
 // All algorithms support per-key limiting:
 //
 //	limiter := ratelimit.NewKeyedTokenBucket(10.0, 20, time.Minute)
-//	limiter.SetMaxKeys(10000) // Optional: cap tracked keys
+//	limiter.SetMaxKeys(10000) // Optional: cap tracked keys, evicting the least recently used
 //	defer limiter.Close()     // Always close to stop cleanup goroutine
 //	limiter.Allow("user:123")
 //	limiter.Allow("user:456")

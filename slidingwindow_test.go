@@ -372,3 +372,42 @@ func TestKeyedSlidingWindow_PanicOnInvalidWindow(t *testing.T) {
 	}()
 	NewKeyedSlidingWindow(5, 0, time.Minute)
 }
+
+func TestSlidingRetryAfter(t *testing.T) {
+	const w = 10 * time.Second
+	tests := []struct {
+		name                 string
+		prev, curr, n, limit int
+		elapsed, wantRetryIn time.Duration
+	}{
+		// 10*(1-x) + 0 + 1 <= 10 once x >= 0.1: 1s into the window, not 10s.
+		{"previous window fades within this window", 10, 0, 1, 10, 0, time.Second},
+		{"already fits", 10, 0, 1, 10, 3 * time.Second, 0},
+		{"no previous count", 0, 5, 1, 10, 0, 0},
+		// Current window is full: wait 8s for the next window, then 10*(1-x)+1 <= 10 needs x >= 0.1.
+		{"current window full", 0, 10, 1, 10, 2 * time.Second, 9 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := slidingRetryAfter(tt.prev, tt.curr, tt.n, tt.limit, tt.elapsed, w)
+			if diff := got - tt.wantRetryIn; diff < -time.Millisecond || diff > time.Millisecond {
+				t.Errorf("slidingRetryAfter = %v, want %v", got, tt.wantRetryIn)
+			}
+		})
+	}
+}
+
+func TestSlidingWindowCounter_RetryAfterIsEarliestFit(t *testing.T) {
+	swc := NewSlidingWindowCounter(10, time.Hour)
+	swc.prevCount = 10
+	swc.windowStart = time.Now()
+
+	r := swc.Take()
+	if r.Allowed {
+		t.Fatal("request allowed with a full previous window")
+	}
+	// The previous window's weight drops enough after 6 minutes, not 1 hour.
+	if r.RetryAfter > 7*time.Minute {
+		t.Errorf("RetryAfter = %v, want about 6m", r.RetryAfter)
+	}
+}

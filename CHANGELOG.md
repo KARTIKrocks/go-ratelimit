@@ -42,9 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `redisstore` limiters read the time from Redis instead of each application
   server, so clock skew between servers no longer affects limits
 - `redisstore` requires the root module at `v1.1.0`
+- **Breaking:** when a keyed limiter reaches `SetMaxKeys`, it now evicts the
+  least recently used key instead of denying every new key. Previously an
+  attacker could fill the table with random keys and lock out real users until
+  cleanup ran. An evicted key starts again with a fresh limit.
+- Keyed limiters' background cleanup only visits expired keys instead of
+  scanning every key while holding the lock
+- Lowering `SetMaxKeys` below the current number of keys evicts the least
+  recently used keys straight away
 
 ### Fixed
 
+- Keyed limiters' `Check`/`CheckN` no longer create an entry for an unknown
+  key, so read-only calls no longer use up `SetMaxKeys` slots
+- `SlidingWindowCounter` and `KeyedSlidingWindow` report the earliest time a
+  request fits as `RetryAfter`, instead of always the end of the window, so
+  `WaitN` no longer blocks up to a full window longer than needed
 - `AllowN`/`CheckN`/`TakeN`/`WaitN` now reject `n <= 0`. Negative `n` previously
   freed up capacity (e.g. `FixedWindow.AllowN(-100)` allowed 100 extra requests).
 - `WaitN` returns `ErrExceedsLimit` when `n` exceeds the limiter's capacity

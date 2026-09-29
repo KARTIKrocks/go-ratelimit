@@ -140,8 +140,13 @@ client-supplied leftmost entry, so clients cannot choose their own key.
 ### Memory Exhaustion Protection
 
 All keyed limiters support `SetMaxKeys(n)` to cap the number of tracked keys.
-When the limit is reached, new keys are denied (fail-closed), preventing
-attackers from exhausting memory with unique keys.
+When the limit is reached, the least recently used key is evicted to make room,
+so attackers can neither exhaust memory with unique keys nor lock out real
+users by filling the table. An evicted key starts again with a fresh limit.
+
+Keys are kept in least-recently-used order, so eviction is O(1) and the
+background cleanup only visits expired keys. `Check`/`CheckN` never create
+entries, so read-only calls don't use up key slots.
 
 ### Lifecycle Management
 
