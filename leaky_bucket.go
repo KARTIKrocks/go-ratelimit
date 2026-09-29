@@ -213,33 +213,19 @@ func (lb *LeakyBucket) Capacity() int {
 
 // KeyedLeakyBucket provides per-key leaky bucket rate limiting.
 type KeyedLeakyBucket struct {
-	rate            float64
-	capacity        int
-	maxKeys         int
-	buckets         map[string]*leakyBucketEntry
-	mu              sync.RWMutex
-	cleanupInterval time.Duration
-	ctx             context.Context
-	cancel          context.CancelFunc
+	rate     float64
+	capacity int
+	store    *keyedStore[leakyBucketEntry]
 }
 
 type leakyBucketEntry struct {
-	water      float64
-	lastLeak   time.Time
-	lastAccess time.Time
-}
-
-// SetMaxKeys sets the maximum number of keys tracked. When the limit is
-// reached, requests for new keys are denied. Zero means unlimited.
-// Returns the receiver for chaining.
-func (klb *KeyedLeakyBucket) SetMaxKeys(n int) *KeyedLeakyBucket {
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
-	klb.maxKeys = n
-	return klb
+	water    float64
+	lastLeak time.Time
 }
 
 // NewKeyedLeakyBucket creates a new keyed leaky bucket limiter.
+// If cleanupInterval is positive, keys idle for twice that long are removed
+// in the background until Close. Use SetMaxKeys to bound memory.
 func NewKeyedLeakyBucket(rate float64, capacity int, cleanupInterval time.Duration) *KeyedLeakyBucket {
 	if rate <= 0 {
 		panic("ratelimit: rate must be positive")
@@ -247,21 +233,13 @@ func NewKeyedLeakyBucket(rate float64, capacity int, cleanupInterval time.Durati
 	if capacity <= 0 {
 		panic("ratelimit: capacity must be positive")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	klb := &KeyedLeakyBucket{
-		rate:            rate,
-		capacity:        capacity,
-		buckets:         make(map[string]*leakyBucketEntry),
-		cleanupInterval: cleanupInterval,
-		ctx:             ctx,
-		cancel:          cancel,
+	return &KeyedLeakyBucket{
+		rate:     rate,
+		capacity: capacity,
+		store: newKeyedStore(cleanupInterval, func(now time.Time) leakyBucketEntry {
+			return leakyBucketEntry{lastLeak: now}
+		}),
 	}
-
-	if cleanupInterval > 0 {
-		go klb.cleanup()
-	}
-
-	return klb
 }
 
 // NewKeyedLeakyBucketPerDuration creates a keyed leaky bucket with rate per duration.
@@ -273,58 +251,15 @@ func NewKeyedLeakyBucketPerDuration(count int, per time.Duration, capacity int, 
 	return NewKeyedLeakyBucket(rate, capacity, cleanupInterval)
 }
 
-// cleanup removes inactive buckets.
-func (klb *KeyedLeakyBucket) cleanup() {
-	ticker := time.NewTicker(klb.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-klb.ctx.Done():
-			return
-		case now := <-ticker.C:
-			klb.mu.Lock()
-			cutoff := now.Add(-klb.cleanupInterval * 2)
-			for key, entry := range klb.buckets {
-				if entry.lastAccess.Before(cutoff) {
-					delete(klb.buckets, key)
-				}
-			}
-			klb.mu.Unlock()
-		}
-	}
-}
-
-// getOrCreate gets or creates a bucket entry for a key.
-// Must be called with klb.mu held. Returns nil if maxKeys is reached.
-func (klb *KeyedLeakyBucket) getOrCreate(key string) *leakyBucketEntry {
-	entry, ok := klb.buckets[key]
-	if !ok {
-		if klb.maxKeys > 0 && len(klb.buckets) >= klb.maxKeys {
-			return nil
-		}
-		entry = &leakyBucketEntry{
-			water:      0,
-			lastLeak:   time.Now(),
-			lastAccess: time.Now(),
-		}
-		klb.buckets[key] = entry
-	}
-	return entry
-}
-
-// leak removes water based on elapsed time.
-// Must be called with klb.mu held.
-func (klb *KeyedLeakyBucket) leak(entry *leakyBucketEntry) {
-	now := time.Now()
-	elapsed := now.Sub(entry.lastLeak).Seconds()
-	entry.lastLeak = now
-	entry.lastAccess = now
-
-	entry.water -= elapsed * klb.rate
-	if entry.water < 0 {
-		entry.water = 0
-	}
+// SetMaxKeys sets the maximum number of keys tracked. When the limit is
+// reached, the least recently used key is evicted to make room for a new
+// one; an evicted key starts again with no usage. Zero means unlimited.
+// Returns the receiver for chaining.
+func (klb *KeyedLeakyBucket) SetMaxKeys(n int) *KeyedLeakyBucket {
+	klb.store.mu.Lock()
+	defer klb.store.mu.Unlock()
+	klb.store.setMaxKeys(n)
+	return klb
 }
 
 // Allow checks if a request for the key is allowed.
@@ -334,24 +269,7 @@ func (klb *KeyedLeakyBucket) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (klb *KeyedLeakyBucket) AllowN(key string, n int) bool {
-	if validateN(n, klb.capacity) != nil {
-		return false
-	}
-
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
-
-	entry := klb.getOrCreate(key)
-	if entry == nil {
-		return false
-	}
-	klb.leak(entry)
-
-	if entry.water+float64(n) <= float64(klb.capacity) {
-		entry.water += float64(n)
-		return true
-	}
-	return false
+	return klb.TakeN(key, n).Allowed
 }
 
 // Wait blocks until a request for the key is allowed.
@@ -364,90 +282,29 @@ func (klb *KeyedLeakyBucket) WaitN(ctx context.Context, key string, n int) error
 	if err := validateN(n, klb.capacity); err != nil {
 		return err
 	}
-
 	for {
-		klb.mu.Lock()
-		entry := klb.getOrCreate(key)
-		if entry == nil {
-			klb.mu.Unlock()
-			return ErrRateLimitExceeded
-		}
-		klb.leak(entry)
-
-		if entry.water+float64(n) <= float64(klb.capacity) {
-			entry.water += float64(n)
-			klb.mu.Unlock()
+		result := klb.TakeN(key, n)
+		if result.Allowed {
 			return nil
 		}
-
-		overflow := entry.water + float64(n) - float64(klb.capacity)
-		waitTime := time.Duration(overflow / klb.rate * float64(time.Second))
-		klb.mu.Unlock()
-
-		timer := time.NewTimer(waitTime)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, max(result.RetryAfter, time.Millisecond)); err != nil {
+			return err
 		}
 	}
 }
 
 // Reset resets the limiter for the given key.
 func (klb *KeyedLeakyBucket) Reset(key string) {
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
-
-	delete(klb.buckets, key)
+	klb.store.mu.Lock()
+	defer klb.store.mu.Unlock()
+	klb.store.delete(key)
 }
 
 // ResetAll resets all keys.
 func (klb *KeyedLeakyBucket) ResetAll() {
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
-
-	klb.buckets = make(map[string]*leakyBucketEntry)
-}
-
-// Take consumes a token for the key and returns the result.
-func (klb *KeyedLeakyBucket) Take(key string) Result {
-	return klb.TakeN(key, 1)
-}
-
-// TakeN consumes n tokens for the key and returns the result.
-func (klb *KeyedLeakyBucket) TakeN(key string, n int) Result {
-	if validateN(n, klb.capacity) != nil {
-		return Result{Limit: klb.capacity}
-	}
-
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
-
-	entry := klb.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: klb.capacity, Remaining: 0}
-	}
-	klb.leak(entry)
-
-	result := Result{
-		Limit:     klb.capacity,
-		Remaining: int(float64(klb.capacity) - entry.water),
-	}
-
-	if entry.water+float64(n) <= float64(klb.capacity) {
-		entry.water += float64(n)
-		result.Allowed = true
-		result.Remaining = int(float64(klb.capacity) - entry.water)
-	} else {
-		result.Allowed = false
-		overflow := entry.water + float64(n) - float64(klb.capacity)
-		result.RetryAfter = time.Duration(overflow / klb.rate * float64(time.Second))
-	}
-
-	return result
+	klb.store.mu.Lock()
+	defer klb.store.mu.Unlock()
+	klb.store.reset()
 }
 
 // Check returns the current state for a key without consuming.
@@ -455,45 +312,67 @@ func (klb *KeyedLeakyBucket) Check(key string) Result {
 	return klb.CheckN(key, 1)
 }
 
-// CheckN returns the state for n tokens without consuming.
+// CheckN returns the state for n requests without consuming. It does not
+// create an entry for an unknown key.
 func (klb *KeyedLeakyBucket) CheckN(key string, n int) Result {
+	return klb.do(key, n, false)
+}
+
+// Take consumes one request for the key and returns the result.
+func (klb *KeyedLeakyBucket) Take(key string) Result {
+	return klb.TakeN(key, 1)
+}
+
+// TakeN consumes n requests for the key and returns the result.
+func (klb *KeyedLeakyBucket) TakeN(key string, n int) Result {
+	return klb.do(key, n, true)
+}
+
+// entry returns the state for key: stored and marked as used when
+// consuming, or a read-only view when only checking.
+// Must be called with klb.store.mu held.
+func (klb *KeyedLeakyBucket) entry(key string, now time.Time, consume bool) *leakyBucketEntry {
+	if consume {
+		return klb.store.get(key, now)
+	}
+	return klb.store.peek(key, now)
+}
+
+func (klb *KeyedLeakyBucket) do(key string, n int, consume bool) Result {
 	if validateN(n, klb.capacity) != nil {
 		return Result{Limit: klb.capacity}
 	}
 
-	klb.mu.Lock()
-	defer klb.mu.Unlock()
+	klb.store.mu.Lock()
+	defer klb.store.mu.Unlock()
 
-	entry := klb.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: klb.capacity, Remaining: 0}
-	}
-	klb.leak(entry)
-
-	result := Result{
-		Limit:     klb.capacity,
-		Remaining: int(float64(klb.capacity) - entry.water),
-	}
+	now := time.Now()
+	entry := klb.entry(key, now, consume)
+	entry.water = max(entry.water-now.Sub(entry.lastLeak).Seconds()*klb.rate, 0)
+	entry.lastLeak = now
 
 	if entry.water+float64(n) <= float64(klb.capacity) {
-		result.Allowed = true
-	} else {
-		result.Allowed = false
-		overflow := entry.water + float64(n) - float64(klb.capacity)
-		result.RetryAfter = time.Duration(overflow / klb.rate * float64(time.Second))
+		if consume {
+			entry.water += float64(n)
+		}
+		return Result{Allowed: true, Limit: klb.capacity, Remaining: int(float64(klb.capacity) - entry.water)}
 	}
-
-	return result
+	overflow := entry.water + float64(n) - float64(klb.capacity)
+	return Result{
+		Limit:      klb.capacity,
+		Remaining:  int(float64(klb.capacity) - entry.water),
+		RetryAfter: time.Duration(overflow / klb.rate * float64(time.Second)),
+	}
 }
 
 // Close stops the cleanup goroutine.
 func (klb *KeyedLeakyBucket) Close() {
-	klb.cancel()
+	klb.store.close()
 }
 
 // Len returns the number of active keys.
 func (klb *KeyedLeakyBucket) Len() int {
-	klb.mu.RLock()
-	defer klb.mu.RUnlock()
-	return len(klb.buckets)
+	klb.store.mu.Lock()
+	defer klb.store.mu.Unlock()
+	return klb.store.len()
 }

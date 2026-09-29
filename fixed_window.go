@@ -192,33 +192,19 @@ func (fw *FixedWindow) Count() int {
 
 // KeyedFixedWindow provides per-key fixed window rate limiting.
 type KeyedFixedWindow struct {
-	limit           int
-	window          time.Duration
-	maxKeys         int
-	entries         map[string]*fixedWindowEntry
-	mu              sync.RWMutex
-	cleanupInterval time.Duration
-	ctx             context.Context
-	cancel          context.CancelFunc
+	limit  int
+	window time.Duration
+	store  *keyedStore[fixedWindowEntry]
 }
 
 type fixedWindowEntry struct {
 	count       int
 	windowStart time.Time
-	lastAccess  time.Time
-}
-
-// SetMaxKeys sets the maximum number of keys tracked. When the limit is
-// reached, requests for new keys are denied. Zero means unlimited.
-// Returns the receiver for chaining.
-func (kfw *KeyedFixedWindow) SetMaxKeys(n int) *KeyedFixedWindow {
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
-	kfw.maxKeys = n
-	return kfw
 }
 
 // NewKeyedFixedWindow creates a new keyed fixed window limiter.
+// If cleanupInterval is positive, keys idle for twice that long are removed
+// in the background until Close. Use SetMaxKeys to bound memory.
 func NewKeyedFixedWindow(limit int, window time.Duration, cleanupInterval time.Duration) *KeyedFixedWindow {
 	if limit <= 0 {
 		panic("ratelimit: limit must be positive")
@@ -226,71 +212,24 @@ func NewKeyedFixedWindow(limit int, window time.Duration, cleanupInterval time.D
 	if window <= 0 {
 		panic("ratelimit: window must be positive")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	kfw := &KeyedFixedWindow{
-		limit:           limit,
-		window:          window,
-		entries:         make(map[string]*fixedWindowEntry),
-		cleanupInterval: cleanupInterval,
-		ctx:             ctx,
-		cancel:          cancel,
+	return &KeyedFixedWindow{
+		limit:  limit,
+		window: window,
+		store: newKeyedStore(cleanupInterval, func(now time.Time) fixedWindowEntry {
+			return fixedWindowEntry{windowStart: now.Truncate(window)}
+		}),
 	}
+}
 
-	if cleanupInterval > 0 {
-		go kfw.cleanup()
-	}
-
+// SetMaxKeys sets the maximum number of keys tracked. When the limit is
+// reached, the least recently used key is evicted to make room for a new
+// one; an evicted key starts again with no usage. Zero means unlimited.
+// Returns the receiver for chaining.
+func (kfw *KeyedFixedWindow) SetMaxKeys(n int) *KeyedFixedWindow {
+	kfw.store.mu.Lock()
+	defer kfw.store.mu.Unlock()
+	kfw.store.setMaxKeys(n)
 	return kfw
-}
-
-// cleanup removes inactive entries.
-func (kfw *KeyedFixedWindow) cleanup() {
-	ticker := time.NewTicker(kfw.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-kfw.ctx.Done():
-			return
-		case now := <-ticker.C:
-			kfw.mu.Lock()
-			cutoff := now.Add(-kfw.cleanupInterval * 2)
-			for key, entry := range kfw.entries {
-				if entry.lastAccess.Before(cutoff) {
-					delete(kfw.entries, key)
-				}
-			}
-			kfw.mu.Unlock()
-		}
-	}
-}
-
-// getOrCreate gets or creates an entry for a key.
-// Must be called with kfw.mu held. Returns nil if maxKeys is reached.
-func (kfw *KeyedFixedWindow) getOrCreate(key string) *fixedWindowEntry {
-	entry, ok := kfw.entries[key]
-	if !ok {
-		if kfw.maxKeys > 0 && len(kfw.entries) >= kfw.maxKeys {
-			return nil
-		}
-		entry = &fixedWindowEntry{
-			windowStart: time.Now().Truncate(kfw.window),
-			lastAccess:  time.Now(),
-		}
-		kfw.entries[key] = entry
-	}
-	return entry
-}
-
-// update resets the entry's window if needed.
-// Must be called with kfw.mu held.
-func (kfw *KeyedFixedWindow) update(entry *fixedWindowEntry, now time.Time) {
-	entry.lastAccess = now
-	windowStart := now.Truncate(kfw.window)
-	if windowStart.After(entry.windowStart) {
-		entry.count = 0
-		entry.windowStart = windowStart
-	}
 }
 
 // Allow checks if a request for the key is allowed.
@@ -300,25 +239,7 @@ func (kfw *KeyedFixedWindow) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (kfw *KeyedFixedWindow) AllowN(key string, n int) bool {
-	if validateN(n, kfw.limit) != nil {
-		return false
-	}
-
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
-
-	entry := kfw.getOrCreate(key)
-	if entry == nil {
-		return false
-	}
-	now := time.Now()
-	kfw.update(entry, now)
-
-	if entry.count+n <= kfw.limit {
-		entry.count += n
-		return true
-	}
-	return false
+	return kfw.TakeN(key, n).Allowed
 }
 
 // Wait blocks until a request for the key is allowed.
@@ -331,94 +252,29 @@ func (kfw *KeyedFixedWindow) WaitN(ctx context.Context, key string, n int) error
 	if err := validateN(n, kfw.limit); err != nil {
 		return err
 	}
-
 	for {
-		kfw.mu.Lock()
-		entry := kfw.getOrCreate(key)
-		if entry == nil {
-			kfw.mu.Unlock()
-			return ErrRateLimitExceeded
-		}
-		now := time.Now()
-		kfw.update(entry, now)
-
-		if entry.count+n <= kfw.limit {
-			entry.count += n
-			kfw.mu.Unlock()
+		result := kfw.TakeN(key, n)
+		if result.Allowed {
 			return nil
 		}
-
-		waitTime := entry.windowStart.Add(kfw.window).Sub(now)
-		if waitTime < 0 {
-			waitTime = time.Millisecond
-		}
-		kfw.mu.Unlock()
-
-		timer := time.NewTimer(waitTime)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, max(result.RetryAfter, time.Millisecond)); err != nil {
+			return err
 		}
 	}
 }
 
 // Reset resets the limiter for the given key.
 func (kfw *KeyedFixedWindow) Reset(key string) {
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
-
-	delete(kfw.entries, key)
+	kfw.store.mu.Lock()
+	defer kfw.store.mu.Unlock()
+	kfw.store.delete(key)
 }
 
 // ResetAll resets all keys.
 func (kfw *KeyedFixedWindow) ResetAll() {
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
-
-	kfw.entries = make(map[string]*fixedWindowEntry)
-}
-
-// Take consumes a token for the key and returns the result.
-func (kfw *KeyedFixedWindow) Take(key string) Result {
-	return kfw.TakeN(key, 1)
-}
-
-// TakeN consumes n tokens for the key and returns the result.
-func (kfw *KeyedFixedWindow) TakeN(key string, n int) Result {
-	if validateN(n, kfw.limit) != nil {
-		return Result{Limit: kfw.limit}
-	}
-
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
-
-	entry := kfw.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: kfw.limit, Remaining: 0}
-	}
-	now := time.Now()
-	kfw.update(entry, now)
-
-	result := Result{
-		Limit:     kfw.limit,
-		Remaining: kfw.limit - entry.count,
-		ResetAt:   entry.windowStart.Add(kfw.window),
-	}
-
-	if entry.count+n <= kfw.limit {
-		entry.count += n
-		result.Allowed = true
-		result.Remaining = kfw.limit - entry.count
-	} else {
-		result.Allowed = false
-		result.RetryAfter = entry.windowStart.Add(kfw.window).Sub(now)
-	}
-
-	return result
+	kfw.store.mu.Lock()
+	defer kfw.store.mu.Unlock()
+	kfw.store.reset()
 }
 
 // Check returns the current state for a key without consuming.
@@ -426,46 +282,70 @@ func (kfw *KeyedFixedWindow) Check(key string) Result {
 	return kfw.CheckN(key, 1)
 }
 
-// CheckN returns the state for n tokens without consuming.
+// CheckN returns the state for n requests without consuming. It does not
+// create an entry for an unknown key.
 func (kfw *KeyedFixedWindow) CheckN(key string, n int) Result {
+	return kfw.do(key, n, false)
+}
+
+// Take consumes one request for the key and returns the result.
+func (kfw *KeyedFixedWindow) Take(key string) Result {
+	return kfw.TakeN(key, 1)
+}
+
+// TakeN consumes n requests for the key and returns the result.
+func (kfw *KeyedFixedWindow) TakeN(key string, n int) Result {
+	return kfw.do(key, n, true)
+}
+
+// entry returns the state for key: stored and marked as used when
+// consuming, or a read-only view when only checking.
+// Must be called with kfw.store.mu held.
+func (kfw *KeyedFixedWindow) entry(key string, now time.Time, consume bool) *fixedWindowEntry {
+	if consume {
+		return kfw.store.get(key, now)
+	}
+	return kfw.store.peek(key, now)
+}
+
+func (kfw *KeyedFixedWindow) do(key string, n int, consume bool) Result {
 	if validateN(n, kfw.limit) != nil {
 		return Result{Limit: kfw.limit}
 	}
 
-	kfw.mu.Lock()
-	defer kfw.mu.Unlock()
+	kfw.store.mu.Lock()
+	defer kfw.store.mu.Unlock()
 
-	entry := kfw.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: kfw.limit, Remaining: 0}
-	}
 	now := time.Now()
-	kfw.update(entry, now)
-
-	result := Result{
-		Limit:     kfw.limit,
-		Remaining: kfw.limit - entry.count,
-		ResetAt:   entry.windowStart.Add(kfw.window),
+	entry := kfw.entry(key, now, consume)
+	if windowStart := now.Truncate(kfw.window); windowStart.After(entry.windowStart) {
+		entry.count = 0
+		entry.windowStart = windowStart
 	}
 
+	resetAt := entry.windowStart.Add(kfw.window)
 	if entry.count+n <= kfw.limit {
-		result.Allowed = true
-	} else {
-		result.Allowed = false
-		result.RetryAfter = entry.windowStart.Add(kfw.window).Sub(now)
+		if consume {
+			entry.count += n
+		}
+		return Result{Allowed: true, Limit: kfw.limit, Remaining: kfw.limit - entry.count, ResetAt: resetAt}
 	}
-
-	return result
+	return Result{
+		Limit:      kfw.limit,
+		Remaining:  kfw.limit - entry.count,
+		ResetAt:    resetAt,
+		RetryAfter: resetAt.Sub(now),
+	}
 }
 
 // Close stops the cleanup goroutine.
 func (kfw *KeyedFixedWindow) Close() {
-	kfw.cancel()
+	kfw.store.close()
 }
 
 // Len returns the number of active keys.
 func (kfw *KeyedFixedWindow) Len() int {
-	kfw.mu.RLock()
-	defer kfw.mu.RUnlock()
-	return len(kfw.entries)
+	kfw.store.mu.Lock()
+	defer kfw.store.mu.Unlock()
+	return kfw.store.len()
 }

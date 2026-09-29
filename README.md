@@ -385,7 +385,8 @@ limiter := ratelimit.NewKeyedTokenBucket(
     5*time.Minute, // cleanup every 5 minutes
 )
 
-// Cap tracked keys to prevent memory exhaustion
+// Cap tracked keys to bound memory. When full, the least recently used key
+// is evicted, so a flood of new keys can't lock out existing users.
 limiter.SetMaxKeys(10000)
 
 // Don't forget to close on shutdown

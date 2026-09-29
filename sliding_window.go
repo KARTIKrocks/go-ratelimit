@@ -419,34 +419,20 @@ func (swc *SlidingWindowCounter) TakeN(n int) Result {
 
 // KeyedSlidingWindow provides per-key sliding window rate limiting.
 type KeyedSlidingWindow struct {
-	limit           int
-	window          time.Duration
-	maxKeys         int
-	entries         map[string]*slidingWindowEntry
-	mu              sync.RWMutex
-	cleanupInterval time.Duration
-	ctx             context.Context
-	cancel          context.CancelFunc
+	limit  int
+	window time.Duration
+	store  *keyedStore[slidingWindowEntry]
 }
 
 type slidingWindowEntry struct {
 	prevCount   int
 	currCount   int
 	windowStart time.Time
-	lastAccess  time.Time
-}
-
-// SetMaxKeys sets the maximum number of keys tracked. When the limit is
-// reached, requests for new keys are denied. Zero means unlimited.
-// Returns the receiver for chaining.
-func (ksw *KeyedSlidingWindow) SetMaxKeys(n int) *KeyedSlidingWindow {
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
-	ksw.maxKeys = n
-	return ksw
 }
 
 // NewKeyedSlidingWindow creates a new keyed sliding window limiter.
+// If cleanupInterval is positive, keys idle for twice that long are removed
+// in the background until Close. Use SetMaxKeys to bound memory.
 func NewKeyedSlidingWindow(limit int, window time.Duration, cleanupInterval time.Duration) *KeyedSlidingWindow {
 	if limit <= 0 {
 		panic("ratelimit: limit must be positive")
@@ -454,86 +440,24 @@ func NewKeyedSlidingWindow(limit int, window time.Duration, cleanupInterval time
 	if window <= 0 {
 		panic("ratelimit: window must be positive")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	ksw := &KeyedSlidingWindow{
-		limit:           limit,
-		window:          window,
-		entries:         make(map[string]*slidingWindowEntry),
-		cleanupInterval: cleanupInterval,
-		ctx:             ctx,
-		cancel:          cancel,
+	return &KeyedSlidingWindow{
+		limit:  limit,
+		window: window,
+		store: newKeyedStore(cleanupInterval, func(now time.Time) slidingWindowEntry {
+			return slidingWindowEntry{windowStart: now.Truncate(window)}
+		}),
 	}
+}
 
-	if cleanupInterval > 0 {
-		go ksw.cleanup()
-	}
-
+// SetMaxKeys sets the maximum number of keys tracked. When the limit is
+// reached, the least recently used key is evicted to make room for a new
+// one; an evicted key starts again with no usage. Zero means unlimited.
+// Returns the receiver for chaining.
+func (ksw *KeyedSlidingWindow) SetMaxKeys(n int) *KeyedSlidingWindow {
+	ksw.store.mu.Lock()
+	defer ksw.store.mu.Unlock()
+	ksw.store.setMaxKeys(n)
 	return ksw
-}
-
-// cleanup removes inactive entries.
-func (ksw *KeyedSlidingWindow) cleanup() {
-	ticker := time.NewTicker(ksw.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ksw.ctx.Done():
-			return
-		case now := <-ticker.C:
-			ksw.mu.Lock()
-			cutoff := now.Add(-ksw.cleanupInterval * 2)
-			for key, entry := range ksw.entries {
-				if entry.lastAccess.Before(cutoff) {
-					delete(ksw.entries, key)
-				}
-			}
-			ksw.mu.Unlock()
-		}
-	}
-}
-
-// getOrCreate gets or creates an entry for a key.
-// Must be called with ksw.mu held. Returns nil if maxKeys is reached.
-func (ksw *KeyedSlidingWindow) getOrCreate(key string) *slidingWindowEntry {
-	entry, ok := ksw.entries[key]
-	if !ok {
-		if ksw.maxKeys > 0 && len(ksw.entries) >= ksw.maxKeys {
-			return nil
-		}
-		entry = &slidingWindowEntry{
-			windowStart: time.Now().Truncate(ksw.window),
-			lastAccess:  time.Now(),
-		}
-		ksw.entries[key] = entry
-	}
-	return entry
-}
-
-// update updates the entry's window if needed.
-// Must be called with ksw.mu held.
-func (ksw *KeyedSlidingWindow) update(entry *slidingWindowEntry, now time.Time) {
-	entry.lastAccess = now
-	windowStart := now.Truncate(ksw.window)
-
-	if windowStart.After(entry.windowStart) {
-		if windowStart.Sub(entry.windowStart) >= ksw.window*2 {
-			entry.prevCount = 0
-			entry.currCount = 0
-		} else {
-			entry.prevCount = entry.currCount
-			entry.currCount = 0
-		}
-		entry.windowStart = windowStart
-	}
-}
-
-// count returns the weighted count for an entry.
-// Must be called with ksw.mu held.
-func (ksw *KeyedSlidingWindow) count(entry *slidingWindowEntry, now time.Time) float64 {
-	elapsed := now.Sub(entry.windowStart)
-	weight := elapsed.Seconds() / ksw.window.Seconds()
-	return float64(entry.prevCount)*(1-weight) + float64(entry.currCount)
 }
 
 // Allow checks if a request for the key is allowed.
@@ -543,25 +467,7 @@ func (ksw *KeyedSlidingWindow) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (ksw *KeyedSlidingWindow) AllowN(key string, n int) bool {
-	if validateN(n, ksw.limit) != nil {
-		return false
-	}
-
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
-
-	entry := ksw.getOrCreate(key)
-	if entry == nil {
-		return false
-	}
-	now := time.Now()
-	ksw.update(entry, now)
-
-	if ksw.count(entry, now)+float64(n) <= float64(ksw.limit) {
-		entry.currCount += n
-		return true
-	}
-	return false
+	return ksw.TakeN(key, n).Allowed
 }
 
 // Wait blocks until a request for the key is allowed.
@@ -574,95 +480,29 @@ func (ksw *KeyedSlidingWindow) WaitN(ctx context.Context, key string, n int) err
 	if err := validateN(n, ksw.limit); err != nil {
 		return err
 	}
-
 	for {
-		ksw.mu.Lock()
-		entry := ksw.getOrCreate(key)
-		if entry == nil {
-			ksw.mu.Unlock()
-			return ErrRateLimitExceeded
-		}
-		now := time.Now()
-		ksw.update(entry, now)
-
-		if ksw.count(entry, now)+float64(n) <= float64(ksw.limit) {
-			entry.currCount += n
-			ksw.mu.Unlock()
+		result := ksw.TakeN(key, n)
+		if result.Allowed {
 			return nil
 		}
-
-		waitTime := entry.windowStart.Add(ksw.window).Sub(now)
-		if waitTime < 0 {
-			waitTime = time.Millisecond
-		}
-		ksw.mu.Unlock()
-
-		timer := time.NewTimer(waitTime)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, max(result.RetryAfter, time.Millisecond)); err != nil {
+			return err
 		}
 	}
 }
 
 // Reset resets the limiter for the given key.
 func (ksw *KeyedSlidingWindow) Reset(key string) {
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
-
-	delete(ksw.entries, key)
+	ksw.store.mu.Lock()
+	defer ksw.store.mu.Unlock()
+	ksw.store.delete(key)
 }
 
 // ResetAll resets all keys.
 func (ksw *KeyedSlidingWindow) ResetAll() {
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
-
-	ksw.entries = make(map[string]*slidingWindowEntry)
-}
-
-// Take consumes a token for the key and returns the result.
-func (ksw *KeyedSlidingWindow) Take(key string) Result {
-	return ksw.TakeN(key, 1)
-}
-
-// TakeN consumes n tokens for the key and returns the result.
-func (ksw *KeyedSlidingWindow) TakeN(key string, n int) Result {
-	if validateN(n, ksw.limit) != nil {
-		return Result{Limit: ksw.limit}
-	}
-
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
-
-	entry := ksw.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: ksw.limit, Remaining: 0}
-	}
-	now := time.Now()
-	ksw.update(entry, now)
-
-	currentCount := ksw.count(entry, now)
-	result := Result{
-		Limit:     ksw.limit,
-		Remaining: int(float64(ksw.limit) - currentCount),
-		ResetAt:   entry.windowStart.Add(ksw.window),
-	}
-
-	if currentCount+float64(n) <= float64(ksw.limit) {
-		entry.currCount += n
-		result.Allowed = true
-		result.Remaining = int(float64(ksw.limit) - ksw.count(entry, now))
-	} else {
-		result.Allowed = false
-		result.RetryAfter = entry.windowStart.Add(ksw.window).Sub(now)
-	}
-
-	return result
+	ksw.store.mu.Lock()
+	defer ksw.store.mu.Unlock()
+	ksw.store.reset()
 }
 
 // Check returns the current state for a key without consuming.
@@ -670,47 +510,79 @@ func (ksw *KeyedSlidingWindow) Check(key string) Result {
 	return ksw.CheckN(key, 1)
 }
 
-// CheckN returns the state for n tokens without consuming.
+// CheckN returns the state for n requests without consuming. It does not
+// create an entry for an unknown key.
 func (ksw *KeyedSlidingWindow) CheckN(key string, n int) Result {
+	return ksw.do(key, n, false)
+}
+
+// Take consumes one request for the key and returns the result.
+func (ksw *KeyedSlidingWindow) Take(key string) Result {
+	return ksw.TakeN(key, 1)
+}
+
+// TakeN consumes n requests for the key and returns the result.
+func (ksw *KeyedSlidingWindow) TakeN(key string, n int) Result {
+	return ksw.do(key, n, true)
+}
+
+// entry returns the state for key: stored and marked as used when
+// consuming, or a read-only view when only checking.
+// Must be called with ksw.store.mu held.
+func (ksw *KeyedSlidingWindow) entry(key string, now time.Time, consume bool) *slidingWindowEntry {
+	if consume {
+		return ksw.store.get(key, now)
+	}
+	return ksw.store.peek(key, now)
+}
+
+func (ksw *KeyedSlidingWindow) do(key string, n int, consume bool) Result {
 	if validateN(n, ksw.limit) != nil {
 		return Result{Limit: ksw.limit}
 	}
 
-	ksw.mu.Lock()
-	defer ksw.mu.Unlock()
+	ksw.store.mu.Lock()
+	defer ksw.store.mu.Unlock()
 
-	entry := ksw.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: ksw.limit, Remaining: 0}
-	}
 	now := time.Now()
-	ksw.update(entry, now)
-
-	currentCount := ksw.count(entry, now)
-	result := Result{
-		Limit:     ksw.limit,
-		Remaining: int(float64(ksw.limit) - currentCount),
-		ResetAt:   entry.windowStart.Add(ksw.window),
+	entry := ksw.entry(key, now, consume)
+	if windowStart := now.Truncate(ksw.window); windowStart.After(entry.windowStart) {
+		if windowStart.Sub(entry.windowStart) >= ksw.window*2 {
+			entry.prevCount = 0
+		} else {
+			entry.prevCount = entry.currCount
+		}
+		entry.currCount = 0
+		entry.windowStart = windowStart
 	}
 
-	if currentCount+float64(n) <= float64(ksw.limit) {
-		result.Allowed = true
-	} else {
-		result.Allowed = false
-		result.RetryAfter = entry.windowStart.Add(ksw.window).Sub(now)
-	}
+	weight := now.Sub(entry.windowStart).Seconds() / ksw.window.Seconds()
+	count := float64(entry.prevCount)*(1-weight) + float64(entry.currCount)
+	resetAt := entry.windowStart.Add(ksw.window)
 
-	return result
+	if count+float64(n) <= float64(ksw.limit) {
+		if consume {
+			entry.currCount += n
+			count += float64(n)
+		}
+		return Result{Allowed: true, Limit: ksw.limit, Remaining: int(float64(ksw.limit) - count), ResetAt: resetAt}
+	}
+	return Result{
+		Limit:      ksw.limit,
+		Remaining:  int(float64(ksw.limit) - count),
+		ResetAt:    resetAt,
+		RetryAfter: resetAt.Sub(now),
+	}
 }
 
 // Close stops the cleanup goroutine.
 func (ksw *KeyedSlidingWindow) Close() {
-	ksw.cancel()
+	ksw.store.close()
 }
 
 // Len returns the number of active keys.
 func (ksw *KeyedSlidingWindow) Len() int {
-	ksw.mu.RLock()
-	defer ksw.mu.RUnlock()
-	return len(ksw.entries)
+	ksw.store.mu.Lock()
+	defer ksw.store.mu.Unlock()
+	return ksw.store.len()
 }

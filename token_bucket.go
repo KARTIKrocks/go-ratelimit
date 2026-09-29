@@ -213,24 +213,19 @@ func (tb *TokenBucket) Burst() int {
 
 // KeyedTokenBucket provides per-key token bucket rate limiting.
 type KeyedTokenBucket struct {
-	rate            float64
-	burst           int
-	maxKeys         int
-	buckets         map[string]*tokenBucketEntry
-	mu              sync.RWMutex
-	cleanupInterval time.Duration
-	ctx             context.Context
-	cancel          context.CancelFunc
+	rate  float64
+	burst int
+	store *keyedStore[tokenBucketEntry]
 }
 
 type tokenBucketEntry struct {
 	tokens     float64
 	lastUpdate time.Time
-	lastAccess time.Time
 }
 
 // NewKeyedTokenBucket creates a new keyed token bucket limiter.
-// Use SetMaxKeys to limit the number of tracked keys (0 = unlimited).
+// If cleanupInterval is positive, keys idle for twice that long are removed
+// in the background until Close. Use SetMaxKeys to bound memory.
 func NewKeyedTokenBucket(rate float64, burst int, cleanupInterval time.Duration) *KeyedTokenBucket {
 	if rate <= 0 {
 		panic("ratelimit: rate must be positive")
@@ -238,30 +233,23 @@ func NewKeyedTokenBucket(rate float64, burst int, cleanupInterval time.Duration)
 	if burst <= 0 {
 		panic("ratelimit: burst must be positive")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	kb := &KeyedTokenBucket{
-		rate:            rate,
-		burst:           burst,
-		buckets:         make(map[string]*tokenBucketEntry),
-		cleanupInterval: cleanupInterval,
-		ctx:             ctx,
-		cancel:          cancel,
+	return &KeyedTokenBucket{
+		rate:  rate,
+		burst: burst,
+		store: newKeyedStore(cleanupInterval, func(now time.Time) tokenBucketEntry {
+			return tokenBucketEntry{tokens: float64(burst), lastUpdate: now}
+		}),
 	}
-
-	if cleanupInterval > 0 {
-		go kb.cleanup()
-	}
-
-	return kb
 }
 
 // SetMaxKeys sets the maximum number of keys tracked. When the limit is
-// reached, requests for new keys are denied. Zero means unlimited.
+// reached, the least recently used key is evicted to make room for a new
+// one; an evicted key starts again with a full bucket. Zero means unlimited.
 // Returns the receiver for chaining.
 func (kb *KeyedTokenBucket) SetMaxKeys(n int) *KeyedTokenBucket {
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-	kb.maxKeys = n
+	kb.store.mu.Lock()
+	defer kb.store.mu.Unlock()
+	kb.store.setMaxKeys(n)
 	return kb
 }
 
@@ -274,59 +262,11 @@ func NewKeyedTokenBucketPerDuration(count int, per time.Duration, burst int, cle
 	return NewKeyedTokenBucket(rate, burst, cleanupInterval)
 }
 
-// cleanup removes inactive buckets.
-func (kb *KeyedTokenBucket) cleanup() {
-	ticker := time.NewTicker(kb.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-kb.ctx.Done():
-			return
-		case now := <-ticker.C:
-			kb.mu.Lock()
-			cutoff := now.Add(-kb.cleanupInterval * 2)
-			for key, entry := range kb.buckets {
-				if entry.lastAccess.Before(cutoff) {
-					delete(kb.buckets, key)
-				}
-			}
-			kb.mu.Unlock()
-		}
-	}
-}
-
-// getOrCreate gets or creates a bucket entry for a key.
-// Must be called with kb.mu held. Returns nil if maxKeys is reached
-// and the key doesn't already exist.
-func (kb *KeyedTokenBucket) getOrCreate(key string) *tokenBucketEntry {
-	entry, ok := kb.buckets[key]
-	if !ok {
-		if kb.maxKeys > 0 && len(kb.buckets) >= kb.maxKeys {
-			return nil
-		}
-		entry = &tokenBucketEntry{
-			tokens:     float64(kb.burst),
-			lastUpdate: time.Now(),
-			lastAccess: time.Now(),
-		}
-		kb.buckets[key] = entry
-	}
-	return entry
-}
-
-// update adds tokens based on elapsed time.
-// Must be called with kb.mu held.
-func (kb *KeyedTokenBucket) update(entry *tokenBucketEntry) {
-	now := time.Now()
+// refill adds tokens based on elapsed time.
+func (kb *KeyedTokenBucket) refill(entry *tokenBucketEntry, now time.Time) {
 	elapsed := now.Sub(entry.lastUpdate).Seconds()
 	entry.lastUpdate = now
-	entry.lastAccess = now
-
-	entry.tokens += elapsed * kb.rate
-	if entry.tokens > float64(kb.burst) {
-		entry.tokens = float64(kb.burst)
-	}
+	entry.tokens = min(entry.tokens+elapsed*kb.rate, float64(kb.burst))
 }
 
 // Allow checks if a request for the key is allowed.
@@ -336,24 +276,7 @@ func (kb *KeyedTokenBucket) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (kb *KeyedTokenBucket) AllowN(key string, n int) bool {
-	if validateN(n, kb.burst) != nil {
-		return false
-	}
-
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-
-	entry := kb.getOrCreate(key)
-	if entry == nil {
-		return false
-	}
-	kb.update(entry)
-
-	if entry.tokens >= float64(n) {
-		entry.tokens -= float64(n)
-		return true
-	}
-	return false
+	return kb.TakeN(key, n).Allowed
 }
 
 // Wait blocks until a request for the key is allowed.
@@ -366,52 +289,29 @@ func (kb *KeyedTokenBucket) WaitN(ctx context.Context, key string, n int) error 
 	if err := validateN(n, kb.burst); err != nil {
 		return err
 	}
-
 	for {
-		kb.mu.Lock()
-		entry := kb.getOrCreate(key)
-		if entry == nil {
-			kb.mu.Unlock()
-			return ErrRateLimitExceeded
-		}
-		kb.update(entry)
-
-		if entry.tokens >= float64(n) {
-			entry.tokens -= float64(n)
-			kb.mu.Unlock()
+		result := kb.TakeN(key, n)
+		if result.Allowed {
 			return nil
 		}
-
-		needed := float64(n) - entry.tokens
-		waitTime := time.Duration(needed / kb.rate * float64(time.Second))
-		kb.mu.Unlock()
-
-		timer := time.NewTimer(waitTime)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, max(result.RetryAfter, time.Millisecond)); err != nil {
+			return err
 		}
 	}
 }
 
 // Reset resets the limiter for the given key.
 func (kb *KeyedTokenBucket) Reset(key string) {
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-
-	delete(kb.buckets, key)
+	kb.store.mu.Lock()
+	defer kb.store.mu.Unlock()
+	kb.store.delete(key)
 }
 
 // ResetAll resets all keys.
 func (kb *KeyedTokenBucket) ResetAll() {
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-
-	kb.buckets = make(map[string]*tokenBucketEntry)
+	kb.store.mu.Lock()
+	defer kb.store.mu.Unlock()
+	kb.store.reset()
 }
 
 // Check returns the current state for a key without consuming tokens.
@@ -419,35 +319,10 @@ func (kb *KeyedTokenBucket) Check(key string) Result {
 	return kb.CheckN(key, 1)
 }
 
-// CheckN returns the state for n tokens without consuming.
+// CheckN returns the state for n tokens without consuming. It does not
+// create an entry for an unknown key.
 func (kb *KeyedTokenBucket) CheckN(key string, n int) Result {
-	if validateN(n, kb.burst) != nil {
-		return Result{Limit: kb.burst}
-	}
-
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-
-	entry := kb.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: kb.burst, Remaining: 0}
-	}
-	kb.update(entry)
-
-	result := Result{
-		Limit:     kb.burst,
-		Remaining: int(entry.tokens),
-	}
-
-	if entry.tokens >= float64(n) {
-		result.Allowed = true
-	} else {
-		result.Allowed = false
-		needed := float64(n) - entry.tokens
-		result.RetryAfter = time.Duration(needed / kb.rate * float64(time.Second))
-	}
-
-	return result
+	return kb.do(key, n, false)
 }
 
 // Take consumes a token for the key and returns the result.
@@ -457,45 +332,48 @@ func (kb *KeyedTokenBucket) Take(key string) Result {
 
 // TakeN consumes n tokens for the key and returns the result.
 func (kb *KeyedTokenBucket) TakeN(key string, n int) Result {
+	return kb.do(key, n, true)
+}
+
+func (kb *KeyedTokenBucket) do(key string, n int, consume bool) Result {
 	if validateN(n, kb.burst) != nil {
 		return Result{Limit: kb.burst}
 	}
 
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
+	kb.store.mu.Lock()
+	defer kb.store.mu.Unlock()
 
-	entry := kb.getOrCreate(key)
-	if entry == nil {
-		return Result{Allowed: false, Limit: kb.burst, Remaining: 0}
+	now := time.Now()
+	var entry *tokenBucketEntry
+	if consume {
+		entry = kb.store.get(key, now)
+	} else {
+		entry = kb.store.peek(key, now)
 	}
-	kb.update(entry)
-
-	result := Result{
-		Limit:     kb.burst,
-		Remaining: int(entry.tokens),
-	}
+	kb.refill(entry, now)
 
 	if entry.tokens >= float64(n) {
-		entry.tokens -= float64(n)
-		result.Allowed = true
-		result.Remaining = int(entry.tokens)
-	} else {
-		result.Allowed = false
-		needed := float64(n) - entry.tokens
-		result.RetryAfter = time.Duration(needed / kb.rate * float64(time.Second))
+		if consume {
+			entry.tokens -= float64(n)
+		}
+		return Result{Allowed: true, Limit: kb.burst, Remaining: int(entry.tokens)}
 	}
-
-	return result
+	needed := float64(n) - entry.tokens
+	return Result{
+		Limit:      kb.burst,
+		Remaining:  int(entry.tokens),
+		RetryAfter: time.Duration(needed / kb.rate * float64(time.Second)),
+	}
 }
 
 // Close stops the cleanup goroutine.
 func (kb *KeyedTokenBucket) Close() {
-	kb.cancel()
+	kb.store.close()
 }
 
 // Len returns the number of active keys.
 func (kb *KeyedTokenBucket) Len() int {
-	kb.mu.RLock()
-	defer kb.mu.RUnlock()
-	return len(kb.buckets)
+	kb.store.mu.Lock()
+	defer kb.store.mu.Unlock()
+	return kb.store.len()
 }

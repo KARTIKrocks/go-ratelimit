@@ -211,9 +211,8 @@ func TestKeyedTokenBucket_ResetAll(t *testing.T) {
 
 func BenchmarkTokenBucket_Allow(b *testing.B) {
 	limiter := NewTokenBucket(1000000.0, 1000000)
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		limiter.Allow()
 	}
 }
@@ -232,9 +231,8 @@ func BenchmarkTokenBucket_AllowParallel(b *testing.B) {
 func BenchmarkKeyedTokenBucket_Allow(b *testing.B) {
 	limiter := NewKeyedTokenBucket(1000000.0, 1000000, time.Minute)
 	defer limiter.Close()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		limiter.Allow("key")
 	}
 }
@@ -251,53 +249,12 @@ func BenchmarkKeyedTokenBucket_AllowParallel(b *testing.B) {
 	})
 }
 
-func TestKeyedTokenBucket_MaxKeys(t *testing.T) {
-	limiter := NewKeyedTokenBucket(10.0, 5, time.Minute)
-	defer limiter.Close()
-	limiter.SetMaxKeys(2)
-
-	// First two keys should succeed
-	if !limiter.Allow("key1") {
-		t.Error("key1 should be allowed")
-	}
-	if !limiter.Allow("key2") {
-		t.Error("key2 should be allowed")
-	}
-
-	// Third new key should be denied (maxKeys reached)
-	if limiter.Allow("key3") {
-		t.Error("key3 should be denied (maxKeys=2)")
-	}
-
-	// Existing key should still work
-	if !limiter.Allow("key1") {
-		t.Error("existing key1 should still be allowed")
-	}
-
-	// Check/Take should also respect maxKeys
-	result := limiter.Take("key4")
-	if result.Allowed {
-		t.Error("key4 Take should be denied")
-	}
-	result = limiter.Check("key5")
-	if result.Allowed {
-		t.Error("key5 Check should be denied")
-	}
-
-	// After reset, new key should work
-	limiter.Reset("key2")
-	if !limiter.Allow("key3") {
-		t.Error("key3 should be allowed after key2 reset")
-	}
-}
-
 func BenchmarkKeyedTokenBucket_MultipleKeys(b *testing.B) {
 	limiter := NewKeyedTokenBucket(1000000.0, 1000000, time.Minute)
 	defer limiter.Close()
 	keys := []string{"key1", "key2", "key3", "key4", "key5"}
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		limiter.Allow(keys[i%len(keys)])
 	}
 }
