@@ -512,8 +512,9 @@ func toInt64(v any) (int64, bool) {
 	case int:
 		return int64(val), true
 	case string:
-		i, err := strconv.ParseInt(val, 10, 64)
-		return i, err == nil
+		// Atoi parses straight into int, so widening to int64 is always safe.
+		i, err := strconv.Atoi(val)
+		return int64(i), err == nil
 	default:
 		return 0, false
 	}
