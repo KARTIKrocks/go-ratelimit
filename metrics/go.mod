@@ -3,7 +3,7 @@ module github.com/KARTIKrocks/go-ratelimit/metrics
 go 1.27
 
 require (
-	github.com/KARTIKrocks/go-ratelimit v0.0.0
+	github.com/KARTIKrocks/go-ratelimit v1.0.0
 	github.com/prometheus/client_golang v1.24.1
 )
 

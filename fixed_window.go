@@ -47,6 +47,10 @@ func (fw *FixedWindow) Allow() bool {
 
 // AllowN checks if n requests are allowed.
 func (fw *FixedWindow) AllowN(n int) bool {
+	if validateN(n, fw.limit) != nil {
+		return false
+	}
+
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 
@@ -67,6 +71,10 @@ func (fw *FixedWindow) Wait(ctx context.Context) error {
 
 // WaitN blocks until n requests are allowed.
 func (fw *FixedWindow) WaitN(ctx context.Context, n int) error {
+	if err := validateN(n, fw.limit); err != nil {
+		return err
+	}
+
 	for {
 		fw.mu.Lock()
 		now := time.Now()
@@ -112,6 +120,10 @@ func (fw *FixedWindow) Check() Result {
 
 // CheckN returns the state for n requests without consuming.
 func (fw *FixedWindow) CheckN(n int) Result {
+	if validateN(n, fw.limit) != nil {
+		return Result{Limit: fw.limit}
+	}
+
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 
@@ -141,6 +153,10 @@ func (fw *FixedWindow) Take() Result {
 
 // TakeN consumes n tokens and returns the result.
 func (fw *FixedWindow) TakeN(n int) Result {
+	if validateN(n, fw.limit) != nil {
+		return Result{Limit: fw.limit}
+	}
+
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 
@@ -284,6 +300,10 @@ func (kfw *KeyedFixedWindow) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (kfw *KeyedFixedWindow) AllowN(key string, n int) bool {
+	if validateN(n, kfw.limit) != nil {
+		return false
+	}
+
 	kfw.mu.Lock()
 	defer kfw.mu.Unlock()
 
@@ -308,6 +328,10 @@ func (kfw *KeyedFixedWindow) Wait(ctx context.Context, key string) error {
 
 // WaitN blocks until n requests for the key are allowed.
 func (kfw *KeyedFixedWindow) WaitN(ctx context.Context, key string, n int) error {
+	if err := validateN(n, kfw.limit); err != nil {
+		return err
+	}
+
 	for {
 		kfw.mu.Lock()
 		entry := kfw.getOrCreate(key)
@@ -365,6 +389,10 @@ func (kfw *KeyedFixedWindow) Take(key string) Result {
 
 // TakeN consumes n tokens for the key and returns the result.
 func (kfw *KeyedFixedWindow) TakeN(key string, n int) Result {
+	if validateN(n, kfw.limit) != nil {
+		return Result{Limit: kfw.limit}
+	}
+
 	kfw.mu.Lock()
 	defer kfw.mu.Unlock()
 
@@ -400,6 +428,10 @@ func (kfw *KeyedFixedWindow) Check(key string) Result {
 
 // CheckN returns the state for n tokens without consuming.
 func (kfw *KeyedFixedWindow) CheckN(key string, n int) Result {
+	if validateN(n, kfw.limit) != nil {
+		return Result{Limit: kfw.limit}
+	}
+
 	kfw.mu.Lock()
 	defer kfw.mu.Unlock()
 

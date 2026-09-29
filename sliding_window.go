@@ -61,6 +61,10 @@ func (sw *SlidingWindow) Allow() bool {
 
 // AllowN checks if n requests are allowed.
 func (sw *SlidingWindow) AllowN(n int) bool {
+	if validateN(n, sw.limit) != nil {
+		return false
+	}
+
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
@@ -83,6 +87,10 @@ func (sw *SlidingWindow) Wait(ctx context.Context) error {
 
 // WaitN blocks until n requests are allowed.
 func (sw *SlidingWindow) WaitN(ctx context.Context, n int) error {
+	if err := validateN(n, sw.limit); err != nil {
+		return err
+	}
+
 	for {
 		sw.mu.Lock()
 		now := time.Now()
@@ -134,6 +142,10 @@ func (sw *SlidingWindow) Check() Result {
 
 // CheckN returns the state for n requests without consuming.
 func (sw *SlidingWindow) CheckN(n int) Result {
+	if validateN(n, sw.limit) != nil {
+		return Result{Limit: sw.limit}
+	}
+
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
@@ -165,6 +177,10 @@ func (sw *SlidingWindow) Take() Result {
 
 // TakeN consumes n tokens and returns the result.
 func (sw *SlidingWindow) TakeN(n int) Result {
+	if validateN(n, sw.limit) != nil {
+		return Result{Limit: sw.limit}
+	}
+
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
@@ -264,6 +280,10 @@ func (swc *SlidingWindowCounter) Allow() bool {
 
 // AllowN checks if n requests are allowed.
 func (swc *SlidingWindowCounter) AllowN(n int) bool {
+	if validateN(n, swc.limit) != nil {
+		return false
+	}
+
 	swc.mu.Lock()
 	defer swc.mu.Unlock()
 
@@ -284,6 +304,10 @@ func (swc *SlidingWindowCounter) Wait(ctx context.Context) error {
 
 // WaitN blocks until n requests are allowed.
 func (swc *SlidingWindowCounter) WaitN(ctx context.Context, n int) error {
+	if err := validateN(n, swc.limit); err != nil {
+		return err
+	}
+
 	for {
 		swc.mu.Lock()
 		now := time.Now()
@@ -330,6 +354,10 @@ func (swc *SlidingWindowCounter) Check() Result {
 
 // CheckN returns the state for n requests without consuming.
 func (swc *SlidingWindowCounter) CheckN(n int) Result {
+	if validateN(n, swc.limit) != nil {
+		return Result{Limit: swc.limit}
+	}
+
 	swc.mu.Lock()
 	defer swc.mu.Unlock()
 
@@ -360,6 +388,10 @@ func (swc *SlidingWindowCounter) Take() Result {
 
 // TakeN consumes n tokens and returns the result.
 func (swc *SlidingWindowCounter) TakeN(n int) Result {
+	if validateN(n, swc.limit) != nil {
+		return Result{Limit: swc.limit}
+	}
+
 	swc.mu.Lock()
 	defer swc.mu.Unlock()
 
@@ -511,6 +543,10 @@ func (ksw *KeyedSlidingWindow) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (ksw *KeyedSlidingWindow) AllowN(key string, n int) bool {
+	if validateN(n, ksw.limit) != nil {
+		return false
+	}
+
 	ksw.mu.Lock()
 	defer ksw.mu.Unlock()
 
@@ -535,6 +571,10 @@ func (ksw *KeyedSlidingWindow) Wait(ctx context.Context, key string) error {
 
 // WaitN blocks until n requests for the key are allowed.
 func (ksw *KeyedSlidingWindow) WaitN(ctx context.Context, key string, n int) error {
+	if err := validateN(n, ksw.limit); err != nil {
+		return err
+	}
+
 	for {
 		ksw.mu.Lock()
 		entry := ksw.getOrCreate(key)
@@ -592,6 +632,10 @@ func (ksw *KeyedSlidingWindow) Take(key string) Result {
 
 // TakeN consumes n tokens for the key and returns the result.
 func (ksw *KeyedSlidingWindow) TakeN(key string, n int) Result {
+	if validateN(n, ksw.limit) != nil {
+		return Result{Limit: ksw.limit}
+	}
+
 	ksw.mu.Lock()
 	defer ksw.mu.Unlock()
 
@@ -628,6 +672,10 @@ func (ksw *KeyedSlidingWindow) Check(key string) Result {
 
 // CheckN returns the state for n tokens without consuming.
 func (ksw *KeyedSlidingWindow) CheckN(key string, n int) Result {
+	if validateN(n, ksw.limit) != nil {
+		return Result{Limit: ksw.limit}
+	}
+
 	ksw.mu.Lock()
 	defer ksw.mu.Unlock()
 

@@ -308,12 +308,20 @@ func TestGetClientIPFromHeaders(t *testing.T) {
 			expected:   "192.168.1.1",
 		},
 		{
-			name: "X-Forwarded-For",
+			name: "X-Forwarded-For uses the entry appended by the proxy",
 			headers: map[string]string{
-				"X-Forwarded-For": "203.0.113.1, 192.168.1.1",
+				"X-Forwarded-For": "203.0.113.1, 198.51.100.7",
 			},
 			remoteAddr: testPrivateAddr,
-			expected:   "203.0.113.1",
+			expected:   "198.51.100.7",
+		},
+		{
+			name: "X-Forwarded-For ignores forged entries on the left",
+			headers: map[string]string{
+				"X-Forwarded-For": "not-an-ip, 6.6.6.6, 198.51.100.7",
+			},
+			remoteAddr: testPrivateAddr,
+			expected:   "198.51.100.7",
 		},
 		{
 			name: "X-Real-IP",
@@ -365,4 +373,79 @@ func BenchmarkMiddleware(b *testing.B) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 	}
+}
+
+func TestTrustedProxiesKeyFunc(t *testing.T) {
+	keyFunc := TrustedProxiesKeyFunc("10.0.0.0/8", "192.168.1.1", "::ffff:172.16.0.1")
+
+	tests := []struct {
+		name       string
+		xff        []string
+		remoteAddr string
+		expected   string
+	}{
+		{
+			name:       "ignores headers from untrusted peer",
+			xff:        []string{"203.0.113.1"},
+			remoteAddr: "198.51.100.7:1234",
+			expected:   "198.51.100.7",
+		},
+		{
+			name:       "IPv4-mapped trusted proxy address",
+			xff:        []string{"203.0.113.1"},
+			remoteAddr: "172.16.0.1:1234",
+			expected:   "203.0.113.1",
+		},
+		{
+			name:       "no header from trusted peer",
+			remoteAddr: "10.1.2.3:1234",
+			expected:   "10.1.2.3",
+		},
+		{
+			name:       "skips trusted hops right to left",
+			xff:        []string{"6.6.6.6, 203.0.113.1, 10.9.9.9"},
+			remoteAddr: "192.168.1.1:1234",
+			expected:   "203.0.113.1",
+		},
+		{
+			name:       "joins repeated headers in order",
+			xff:        []string{"6.6.6.6", "203.0.113.1", "10.9.9.9"},
+			remoteAddr: "10.1.2.3:1234",
+			expected:   "203.0.113.1",
+		},
+		{
+			name:       "stops at malformed entry",
+			xff:        []string{"garbage, 10.9.9.9"},
+			remoteAddr: "10.1.2.3:1234",
+			expected:   "10.9.9.9",
+		},
+		{
+			name:       "all hops trusted",
+			xff:        []string{"10.8.8.8, 10.9.9.9"},
+			remoteAddr: "10.1.2.3:1234",
+			expected:   "10.8.8.8",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req.RemoteAddr = tt.remoteAddr
+			for _, v := range tt.xff {
+				req.Header.Add("X-Forwarded-For", v)
+			}
+			if got := keyFunc(req); got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestTrustedProxiesKeyFunc_PanicsOnInvalidCIDR(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic")
+		}
+	}()
+	TrustedProxiesKeyFunc("not-a-cidr")
 }

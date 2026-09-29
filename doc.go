@@ -103,7 +103,8 @@
 // Extract rate limit keys from requests:
 //
 //	ratelimit.IPKeyFunc                    // By IP address (RemoteAddr, safe default)
-//	ratelimit.TrustedProxyKeyFunc          // By IP from proxy headers (opt-in)
+//	ratelimit.TrustedProxyKeyFunc          // By IP from proxy headers, single proxy (opt-in)
+//	ratelimit.TrustedProxiesKeyFunc(cidrs...) // By IP behind one or more known proxies
 //	ratelimit.HeaderKeyFunc("X-API-Key")   // By header
 //	ratelimit.PathKeyFunc                  // By path
 //	ratelimit.IPPathKeyFunc                // By IP + path
@@ -112,7 +113,7 @@
 // IP extraction functions:
 //
 //	ratelimit.GetClientIP(r)               // Safe: uses RemoteAddr only
-//	ratelimit.GetClientIPFromHeaders(r)    // Trusts X-Forwarded-For, X-Real-IP, CF-Connecting-IP
+//	ratelimit.GetClientIPFromHeaders(r)    // Trusts rightmost X-Forwarded-For, X-Real-IP, CF-Connecting-IP
 //
 // # Metrics
 //

@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- `GetClientIPFromHeaders` and `TrustedProxyKeyFunc` now use the rightmost
+  `X-Forwarded-For` entry instead of the leftmost, which clients can forge to
+  bypass rate limiting. Deployments with several proxy hops should switch to
+  the new `TrustedProxiesKeyFunc`.
+
+  **Breaking:** with more than one proxy hop, the rightmost entry is now a
+  proxy's address, so all clients behind that proxy share one bucket. For
+  example, behind Cloudflare plus your own load balancer the key becomes a
+  Cloudflare edge IP. Use `TrustedProxiesKeyFunc` with your proxy ranges, or
+  `HeaderKeyFunc("CF-Connecting-IP")` if only Cloudflare can reach your
+  origin.
+
+### Added
+
+- `TrustedProxiesKeyFunc(trustedCIDRs...)` for deployments behind one or more
+  known proxies
+- `ErrInvalidN` and `ErrExceedsLimit` errors
+
+### Fixed
+
+- `AllowN`/`CheckN`/`TakeN`/`WaitN` now reject `n <= 0`. Negative `n` previously
+  freed up capacity (e.g. `FixedWindow.AllowN(-100)` allowed 100 extra requests).
+- `WaitN` returns `ErrExceedsLimit` when `n` exceeds the limiter's capacity
+  instead of blocking until the context is done (forever with
+  `context.Background()`)
+- `Multi` no longer consumes capacity from some limiters when another denies
+  the request; `Multi.WaitN` no longer consumes while it waits
+- `redisstore` and `metrics` modules can now be installed: their `go.mod`
+  required a non-existent root version `v0.0.0`
+
 ## [0.0.1] - 2026-02-14
 
 ### Added

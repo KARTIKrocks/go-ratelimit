@@ -64,6 +64,10 @@ func (tb *TokenBucket) Allow() bool {
 
 // AllowN checks if n requests are allowed.
 func (tb *TokenBucket) AllowN(n int) bool {
+	if validateN(n, tb.burst) != nil {
+		return false
+	}
+
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
@@ -83,6 +87,10 @@ func (tb *TokenBucket) Wait(ctx context.Context) error {
 
 // WaitN blocks until n requests are allowed.
 func (tb *TokenBucket) WaitN(ctx context.Context, n int) error {
+	if err := validateN(n, tb.burst); err != nil {
+		return err
+	}
+
 	for {
 		tb.mu.Lock()
 		tb.update()
@@ -125,6 +133,10 @@ func (tb *TokenBucket) Check() Result {
 
 // CheckN returns the state for n tokens without consuming.
 func (tb *TokenBucket) CheckN(n int) Result {
+	if validateN(n, tb.burst) != nil {
+		return Result{Limit: tb.burst}
+	}
+
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
@@ -153,6 +165,10 @@ func (tb *TokenBucket) Take() Result {
 
 // TakeN consumes n tokens and returns the result.
 func (tb *TokenBucket) TakeN(n int) Result {
+	if validateN(n, tb.burst) != nil {
+		return Result{Limit: tb.burst}
+	}
+
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
@@ -320,6 +336,10 @@ func (kb *KeyedTokenBucket) Allow(key string) bool {
 
 // AllowN checks if n requests for the key are allowed.
 func (kb *KeyedTokenBucket) AllowN(key string, n int) bool {
+	if validateN(n, kb.burst) != nil {
+		return false
+	}
+
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 
@@ -343,6 +363,10 @@ func (kb *KeyedTokenBucket) Wait(ctx context.Context, key string) error {
 
 // WaitN blocks until n requests for the key are allowed.
 func (kb *KeyedTokenBucket) WaitN(ctx context.Context, key string, n int) error {
+	if err := validateN(n, kb.burst); err != nil {
+		return err
+	}
+
 	for {
 		kb.mu.Lock()
 		entry := kb.getOrCreate(key)
@@ -397,6 +421,10 @@ func (kb *KeyedTokenBucket) Check(key string) Result {
 
 // CheckN returns the state for n tokens without consuming.
 func (kb *KeyedTokenBucket) CheckN(key string, n int) Result {
+	if validateN(n, kb.burst) != nil {
+		return Result{Limit: kb.burst}
+	}
+
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 
@@ -429,6 +457,10 @@ func (kb *KeyedTokenBucket) Take(key string) Result {
 
 // TakeN consumes n tokens for the key and returns the result.
 func (kb *KeyedTokenBucket) TakeN(key string, n int) Result {
+	if validateN(n, kb.burst) != nil {
+		return Result{Limit: kb.burst}
+	}
+
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 

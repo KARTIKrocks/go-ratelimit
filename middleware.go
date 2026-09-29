@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -249,19 +250,16 @@ func GetClientIP(r *http.Request) string {
 
 // GetClientIPFromHeaders extracts the client IP from proxy headers, falling
 // back to RemoteAddr. It checks X-Forwarded-For, X-Real-IP, and
-// CF-Connecting-IP in order. Only use this when the server is behind a
-// trusted reverse proxy that sets these headers.
+// CF-Connecting-IP in order. Only use this when the server is behind exactly
+// one trusted reverse proxy that sets these headers.
+//
+// For X-Forwarded-For it uses the rightmost entry, which is the address the
+// proxy itself observed. Entries further left are supplied by the client and
+// can be forged. For deployments with several proxy hops, use
+// TrustedProxiesKeyFunc.
 func GetClientIPFromHeaders(r *http.Request) string {
-	// Check X-Forwarded-For header
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For can contain multiple IPs, take the first one
-		if i := strings.Index(xff, ","); i > 0 {
-			xff = xff[:i]
-		}
-		xff = strings.TrimSpace(xff)
-		if ip := net.ParseIP(xff); ip != nil {
-			return ip.String()
-		}
+	if ips := forwardedFor(r); len(ips) > 0 && ips[len(ips)-1] != nil {
+		return ips[len(ips)-1].String()
 	}
 
 	// Check X-Real-IP header
@@ -282,9 +280,80 @@ func GetClientIPFromHeaders(r *http.Request) string {
 }
 
 // TrustedProxyKeyFunc creates a key function that extracts client IP from
-// proxy headers. Only use when the server is behind a trusted reverse proxy.
+// proxy headers. Only use when the server is behind a single trusted reverse
+// proxy. See GetClientIPFromHeaders.
 func TrustedProxyKeyFunc(r *http.Request) string {
 	return GetClientIPFromHeaders(r)
+}
+
+// TrustedProxiesKeyFunc creates a key function for deployments behind one or
+// more reverse proxies. trustedCIDRs lists the proxy networks, for example
+// "10.0.0.0/8"; a bare IP is treated as a single-address network.
+//
+// Proxy headers are honored only when the request comes directly from a
+// trusted proxy. The client IP is the rightmost X-Forwarded-For entry that is
+// not itself a trusted proxy. Otherwise the key is RemoteAddr.
+// It panics if a CIDR cannot be parsed.
+func TrustedProxiesKeyFunc(trustedCIDRs ...string) KeyFunc {
+	nets := make([]*net.IPNet, 0, len(trustedCIDRs))
+	for _, c := range trustedCIDRs {
+		if !strings.Contains(c, "/") {
+			if ip := net.ParseIP(c); ip != nil && ip.To4() != nil {
+				// Normalise IPv4-mapped IPv6 (::ffff:a.b.c.d) to plain IPv4
+				// so the /32 applies to the IPv4 address.
+				c = ip.To4().String() + "/32"
+			} else {
+				c += "/128"
+			}
+		}
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic("ratelimit: invalid trusted proxy CIDR " + strconv.Quote(c))
+		}
+		nets = append(nets, n)
+	}
+
+	trusted := func(ip net.IP) bool {
+		for _, n := range nets {
+			if n.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
+
+	return func(r *http.Request) string {
+		remote := GetClientIP(r)
+		if ip := net.ParseIP(remote); ip == nil || !trusted(ip) {
+			return remote
+		}
+		ips := forwardedFor(r)
+		client := remote
+		for _, ip := range slices.Backward(ips) {
+			if ip == nil {
+				// Trusted proxies always append valid IPs, so a malformed
+				// entry was not written by one. Stop at the last good hop.
+				break
+			}
+			client = ip.String()
+			if !trusted(ip) {
+				break
+			}
+		}
+		return client
+	}
+}
+
+// forwardedFor parses every X-Forwarded-For header on r, in order.
+// Entries that are not valid IPs are kept as nil so positions are preserved.
+func forwardedFor(r *http.Request) []net.IP {
+	var ips []net.IP
+	for _, h := range r.Header.Values("X-Forwarded-For") {
+		for part := range strings.SplitSeq(h, ",") {
+			ips = append(ips, net.ParseIP(strings.TrimSpace(part)))
+		}
+	}
+	return ips
 }
 
 // Skip Functions

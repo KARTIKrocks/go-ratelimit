@@ -192,8 +192,13 @@ result := limiter.TakeNCtx(ctx, "user:123", 1)
 // By IP address (default, uses RemoteAddr - safe, not spoofable)
 ratelimit.WithKeyFunc(ratelimit.IPKeyFunc)
 
-// By IP from proxy headers (opt-in, trusts X-Forwarded-For/X-Real-IP/CF-Connecting-IP)
+// By IP from proxy headers, behind exactly one proxy (opt-in; uses the
+// rightmost X-Forwarded-For entry, then X-Real-IP/CF-Connecting-IP)
 ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc)
+
+// By IP behind one or more known proxies: headers are only honored when the
+// request comes from a trusted proxy, and trusted hops are skipped
+ratelimit.WithKeyFunc(ratelimit.TrustedProxiesKeyFunc("10.0.0.0/8"))
 
 // By header
 ratelimit.WithKeyFunc(ratelimit.HeaderKeyFunc("X-API-Key"))
