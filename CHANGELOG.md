@@ -86,6 +86,10 @@ module at `v1.1.0` or later.
 - `redisstore` limiters validate `n` like the in-memory limiters and no longer
   call Redis for invalid `n`
 
+## [1.0.0] - 2026-02-17
+
+Same code as 0.0.1, tagged as the first stable release.
+
 ## [0.0.1] - 2026-02-14
 
 ### Added
@@ -136,4 +140,5 @@ module at `v1.1.0` or later.
 
 [Unreleased]: https://github.com/KARTIKrocks/go-ratelimit/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/KARTIKrocks/go-ratelimit/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/KARTIKrocks/go-ratelimit/releases/tag/v1.0.0
 [0.0.1]: https://github.com/KARTIKrocks/go-ratelimit/releases/tag/v0.0.1
