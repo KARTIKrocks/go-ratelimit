@@ -26,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TrustedProxiesKeyFunc(trustedCIDRs...)` for deployments behind one or more
   known proxies
 - `ErrInvalidN` and `ErrExceedsLimit` errors
+- `redisstore.WithFailClosed()` to deny requests on Redis errors, and
+  `redisstore.WithErrorHandler(fn)` to log or count them. Redis constructors
+  accept these as optional trailing arguments.
+
+### Changed
+
+- **Breaking (`redisstore`):** each rate-limit key is now stored in a single
+  Redis hash (`<prefix>:<algorithm>:{<key>}`). Existing counters are ignored
+  after upgrading, so every client starts with a fresh limit once.
+- `redisstore` limiters read the time from Redis instead of each application
+  server, so clock skew between servers no longer affects limits
+- `redisstore` requires the root module at `v1.1.0`
 
 ### Fixed
 
@@ -38,6 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the request; `Multi.WaitN` no longer consumes while it waits
 - `redisstore` and `metrics` modules can now be installed: their `go.mod`
   required a non-existent root version `v0.0.0`
+- `redisstore` sliding and fixed window limiters work on Redis Cluster; they
+  created keys inside Lua without declaring them, which caused `CROSSSLOT`
+  errors that were silently treated as "allow"
+- `redisstore.RedisTokenBucket.WaitN` no longer busy-loops against Redis:
+  sub-second retry times were truncated to 0
+- `redisstore` windows under 1s no longer panic in `Reset`, and fractional
+  windows (e.g. 1.5s) no longer make `Reset` delete the wrong key or make every
+  request fail open
+- `redisstore` limiters validate `n` like the in-memory limiters and no longer
+  call Redis for invalid `n`
 
 ## [0.0.1] - 2026-02-14
 

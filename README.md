@@ -404,7 +404,21 @@ limiter := redisstore.NewRedisTokenBucket(adapter, "app", 10.0, 20)
 // This prevents Redis outages from blocking all traffic
 result := limiter.Take("user:123")
 // result.Allowed == true when Redis is unreachable
+
+// To deny requests instead, and to see errors (for logs or metrics):
+limiter = redisstore.NewRedisTokenBucket(adapter, "app", 10.0, 20,
+    redisstore.WithFailClosed(),
+    redisstore.WithErrorHandler(func(err error) {
+        log.Printf("rate limiter: %v", err)
+        metrics.RecordError("api")
+    }),
+)
 ```
+
+The Redis limiters read the time from Redis itself, so clock differences
+between your servers don't matter. Each rate-limit key is stored in a single
+Redis key, so they work with Redis Cluster. Windows have millisecond precision
+and must be at least 1ms.
 
 ## Examples
 
