@@ -16,6 +16,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  common-mk:
+    uses: KARTIKrocks/go-build-tools/.github/workflows/check-common-mk.yml@main
+
   test:
     name: test (root, ${{ matrix.label }})
     runs-on: ubuntu-latest

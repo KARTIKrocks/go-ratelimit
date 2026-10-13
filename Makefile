@@ -1,6 +1,4 @@
-GOLANGCI_LINT_VERSION := v2.14.0
-GOIMPORTS_VERSION := v0.50.0
-GOVULNCHECK_VERSION := v1.8.0
+include common.mk
 
 # Nested modules. Each has its own go.mod, so the root module's ./... does not
 # reach them — they need to be built and tested explicitly. They resolve the
@@ -8,24 +6,9 @@ GOVULNCHECK_VERSION := v1.8.0
 SUBMODULES := redisstore metrics
 EXAMPLE_MODULES := examples/basic examples/multitier examples/redis examples/prometheus
 
-.PHONY: all setup deps tidy tidy-modules tidy-check test test-v test-race test-modules test-integration vet vet-modules lint lint-modules lint-fix fix vuln vuln-modules print-govulncheck-version print-golangci-lint-version build build-examples bench bench-compare fmt fmt-check cover clean ci pre-commit help
+.PHONY: all setup deps tidy tidy-modules tidy-check test test-v test-race test-modules test-integration vet vet-modules lint lint-modules lint-fix fix vuln vuln-modules build build-examples bench bench-compare fmt fmt-check cover clean ci pre-commit help
 
 all: fmt vet vet-modules lint lint-modules test test-modules build build-examples
-
-## Install development tools (skips if already present)
-setup:
-	@command -v golangci-lint >/dev/null 2>&1 || { \
-		echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
-	}
-	@command -v goimports >/dev/null 2>&1 || { \
-		echo "Installing goimports $(GOIMPORTS_VERSION)..."; \
-		go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION); \
-	}
-	@command -v govulncheck >/dev/null 2>&1 || { \
-		echo "Installing govulncheck $(GOVULNCHECK_VERSION)..."; \
-		go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION); \
-	}
 
 ## Download module dependencies
 deps:
@@ -127,14 +110,6 @@ fix:
 ## Needs network access; also scans the installed Go standard library.
 vuln: setup
 	govulncheck ./...
-
-## Print the pinned scanner version (CI reads this to avoid drift).
-print-govulncheck-version:
-	@echo $(GOVULNCHECK_VERSION)
-
-## Print the pinned linter version (CI reads this to avoid drift).
-print-golangci-lint-version:
-	@echo $(GOLANGCI_LINT_VERSION)
 
 ## Scan every nested module
 vuln-modules: setup
