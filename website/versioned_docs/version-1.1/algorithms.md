@@ -64,7 +64,8 @@ ratelimit.NewSlidingWindow(5, 15*time.Minute)                 // log
 ratelimit.NewSlidingWindowCounter(100, time.Minute)           // counter
 ```
 
-Each has a keyed counterpart that takes an extra cleanup interval — see
+Each except the sliding window log has a keyed counterpart that takes an
+extra cleanup interval — see
 [Keyed Limiters](./keyed-limiters.md).
 
 Constructors panic on arguments that cannot form a valid limiter: a rate,

@@ -86,7 +86,7 @@ ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 defer cancel()
 
 if err := limiter.Wait(ctx, "user:42"); err != nil {
-    return err // ctx.Err(), or a validation error for n
+    return err // ctx.Err(), a validation error for n, or a Redis error when failing closed
 }
 ```
 
@@ -112,7 +112,10 @@ it might:
 
 `Reset` returns a limiter to its starting state — a full bucket, or an empty
 window. On a keyed limiter, `Reset(key)` forgets one key and `ResetAll()`
-forgets every key.
+forgets every key. The Redis limiters can only reset all keys when their client
+implements `KeyDeleter`; otherwise `ResetAll` deletes nothing. It returns no
+error, so the only signal is `ErrResetAllUnsupported` passed to the
+`WithErrorHandler` callback — without one, the failure is silent. See [Resetting](./redis.md#resetting).
 
 ## Thread safety
 

@@ -100,7 +100,8 @@ func main() {
 }
 ```
 
-Every response carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`. A
+Every rate-limited response carries `X-RateLimit-Limit` and
+`X-RateLimit-Remaining`; skipped health checks get none. A
 rejected request gets a `429 Too Many Requests` with a `Retry-After` header and
 a JSON body:
 

@@ -14,8 +14,8 @@ never succeed and for infrastructure failures.
 
 | Error | Returned by | Meaning |
 | --- | --- | --- |
-| `ErrInvalidN` | `Wait`, `WaitN` | `n` is zero or negative |
-| `ErrExceedsLimit` | `Wait`, `WaitN` | `n` is larger than the limiter's capacity, so it can never be allowed |
+| `ErrInvalidN` | `WaitN` | `n` is zero or negative |
+| `ErrExceedsLimit` | `WaitN` | `n` is larger than the limiter's capacity, so it can never be allowed |
 | `ErrRateLimitExceeded` | nothing in this package | a ready-made error for your own code to return when a limit is hit |
 | `redisstore.ErrResetAllUnsupported` | the Redis error handler | `ResetAll` was called on a client that does not implement `KeyDeleter` |
 

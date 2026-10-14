@@ -145,8 +145,8 @@ it is meant for tests and administrative tools, not the request path.
 The limiters accept any `RedisClient`, an interface covering `Eval`, `Get`,
 `Set`, `Del`, `Incr`, `Expire`, and `TTL`. Implement it to use a different
 Redis library or to add instrumentation. To support `ResetAll`, also implement
-`KeyDeleter`; without it, `ResetAll` reports `ErrResetAllUnsupported` to the
-error handler and deletes nothing.
+`KeyDeleter`; without it, `ResetAll` deletes nothing and passes
+`ErrResetAllUnsupported` to the error handler — silently, if none is set.
 
 `Eval` must return the script's reply as a `[]any` of `int64`, as go-redis does.
 `int` and numeric strings are also accepted, but only on 64-bit platforms: the
