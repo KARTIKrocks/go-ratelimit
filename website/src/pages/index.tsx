@@ -99,7 +99,7 @@ const ALGORITHMS = [
   {
     name: 'Sliding window log',
     to: '/docs/sliding-window',
-    bursts: 'None — exact',
+    bursts: 'Up to limit, exact window',
     memory: 'One timestamp per request',
     redis: false,
   },

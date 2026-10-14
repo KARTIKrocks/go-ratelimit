@@ -17,8 +17,9 @@ limiter := ratelimit.NewFixedWindow(1000, time.Hour)
 ## Windows are aligned to the clock
 
 Windows start at multiples of `window` (the start is `time.Now().Truncate(window)`),
-not at the first request. With `time.Hour`, every window starts on the hour,
-and every key resets at the same moment. That makes the limit easy to explain
+not at the first request, counted from the zero time in UTC. With `time.Hour`,
+every window starts on the UTC hour — at :30 or :45 local time in zones with a
+fractional offset — and every key resets at the same moment. That makes the limit easy to explain
 ("1,000 per clock hour") and easy to show in a UI, since `ResetAt` is
 predictable.
 

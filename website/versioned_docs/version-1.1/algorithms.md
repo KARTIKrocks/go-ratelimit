@@ -17,7 +17,7 @@ you will tolerate and how much state you are willing to keep.
 | [Token bucket](./token-bucket.md) | up to the burst size, then a steady rate | constant | ✓ | ✓ |
 | [Leaky bucket](./leaky-bucket.md) | up to the capacity, then a steady rate | constant | ✓ | — |
 | [Fixed window](./fixed-window.md) | up to 2× the limit across a window boundary | constant | ✓ | ✓ |
-| [Sliding window log](./sliding-window.md#sliding-window-log) | none — exact | one timestamp per request in the window | — | — |
+| [Sliding window log](./sliding-window.md#sliding-window-log) | up to the limit at once, never more than the limit in any window | one timestamp per request in the window | — | — |
 | [Sliding window counter](./sliding-window.md#sliding-window-counter) | smoothed approximation | constant | ✓ | ✓ |
 
 ## Recommendations

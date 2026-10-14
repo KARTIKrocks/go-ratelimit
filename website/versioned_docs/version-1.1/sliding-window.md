@@ -6,9 +6,11 @@ description: The sliding window log (exact, one timestamp per request) and slidi
 
 # Sliding Window
 
-Both sliding window algorithms enforce "at most `limit` requests in any
+Both sliding window algorithms aim for "at most `limit` requests in any
 `window`-long stretch", without the [fixed window](./fixed-window.md)'s
-boundary burst. They differ in how exactly they track it.
+boundary burst. The log enforces it exactly; the counter estimates it, and can
+admit somewhat more than `limit` when traffic clusters around a window
+boundary.
 
 ## Sliding window log
 

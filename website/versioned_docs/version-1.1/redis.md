@@ -148,5 +148,6 @@ Redis library or to add instrumentation. To support `ResetAll`, also implement
 `KeyDeleter`; without it, `ResetAll` reports `ErrResetAllUnsupported` to the
 error handler and deletes nothing.
 
-`Eval` must return the script's reply as a `[]any` of integers (`int64`, `int`,
-or numeric strings), as go-redis does.
+`Eval` must return the script's reply as a `[]any` of `int64`, as go-redis does.
+`int` and numeric strings are also accepted, but only on 64-bit platforms: the
+reply carries Unix-millisecond times that overflow a 32-bit `int`.

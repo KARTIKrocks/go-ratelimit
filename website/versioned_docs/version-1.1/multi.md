@@ -37,13 +37,17 @@ consumes when every check passes. A denied request costs nothing.
 
 If any limiter does not implement `ResultLimiter`, `Multi` falls back to
 consuming from each limiter in turn, and cannot undo earlier consumption when
-a later one denies.
+a later one denies. `Multi` itself is not a `ResultLimiter`, so nesting one
+`Multi` inside another triggers this fallback — pass all limiters to a single
+`NewMulti` instead.
 
 ## Waiting
 
 `WaitN` on a `Multi` waits for the **longest** `RetryAfter` reported by the
 limiters that denied, then checks all of them again. It returns
-`ErrExceedsLimit` straight away if `n` is larger than any limiter's capacity.
+`ErrExceedsLimit` straight away if `n` is larger than any limiter's capacity,
+as reported in `Result.Limit`. Built-in limiters always set it; a custom
+`ResultLimiter` that leaves it zero makes `WaitN` retry until the context ends.
 
 ## Concurrency
 

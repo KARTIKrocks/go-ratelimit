@@ -236,8 +236,9 @@ rather than convenient:
 - **IPv6 clients are keyed by their /64 network** (next release; v1.1.0 keys
   each address separately), so a client cannot rotate through its own address
   block to reset its limit.
-- **Key-set growth is bounded** by `SetMaxKeys`, so a flood of new keys cannot
-  exhaust memory.
+- **Key-set growth can be bounded** with `SetMaxKeys`, so a flood of new keys
+  cannot exhaust memory. It is unlimited by default; set it on any limiter keyed
+  by client-controlled values.
 - **Redis failures are observable**, and can fail closed for limits that guard
   against abuse.
 

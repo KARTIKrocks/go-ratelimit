@@ -39,8 +39,11 @@ Every key the limiter sees costs a small entry. Two mechanisms keep that bounded
 
 If `cleanupInterval` is positive, a background goroutine runs every
 `cleanupInterval` and removes keys that have not been used for **twice** that
-long. A removed key starts fresh the next time it appears, which is harmless:
-an idle key would have refilled (or its window expired) anyway.
+long. A removed key starts fresh the next time it appears. That is harmless
+only if twice the interval covers a full recovery — `burst / rate` for the
+buckets, the window length for the windows. A 1-hour window with a 1-minute
+cleanup interval would reset clients after 2 idle minutes, so pick an interval
+of at least half the recovery time.
 
 Pass `0` to disable the goroutine. Without it, keys are only removed by the
 key cap or `Reset`.

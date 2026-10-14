@@ -62,7 +62,9 @@ lets anyone pick their own key and dodge the limit.
 and falls back to `RemoteAddr`.
 
 ```go
-ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc)
+handler := ratelimit.Middleware(limiter,
+    ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc),
+)(mux)
 ```
 
 Use it only when **every** request reaches the server through exactly one proxy

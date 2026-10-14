@@ -28,8 +28,10 @@ limiter := metrics.NewInstrumented(base, "api")
 handler := ratelimit.Middleware(limiter)(mux)
 ```
 
-`Instrumented` implements `KeyedResultLimiter`, so it goes anywhere the
-original did — the middleware, `PathLimiter`, or your own code. Every `Take`
+`Instrumented` implements `KeyedResultLimiter`, so it works wherever that
+interface is accepted — the middleware, `PathLimiter`, or your own code. It
+has no `Allow`, `Wait`, or `Reset`; call those on the base limiter, and note
+that `WaitMiddleware`, which needs a `KeyedLimiter`, cannot take it. Every `Take`
 and `TakeN` records one allowed or denied check. `Check` and `CheckN` are
 read-only peeks and record nothing.
 

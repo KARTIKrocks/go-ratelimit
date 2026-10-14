@@ -24,7 +24,7 @@ go get github.com/KARTIKrocks/go-ratelimit
 | **Distributed** | Redis-backed limiters that share one limit across every instance |
 | **HTTP middleware** | `net/http` middleware with `X-RateLimit-*` and `Retry-After` headers |
 | **Proxy-aware keys** | Safe `RemoteAddr` default, opt-in proxy header handling with a trusted-proxy list |
-| **Composite limits** | Several limits checked together, consuming from none unless all allow |
+| **Composite limits** | Several limits checked together; with the built-in limiters, none is consumed unless all allow |
 | **Observability** | Instrumented wrappers and Prometheus counters in the `metrics` module |
 | **Zero dependencies** | The core package uses only the standard library |
 | **Thread safe** | Every limiter is safe for concurrent use |
