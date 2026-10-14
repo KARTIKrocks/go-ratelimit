@@ -324,9 +324,9 @@ if err := client.Ping(ctx).Err(); err != nil {
 
 ## Get Help
 
-- **Documentation**: https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit
+- **Documentation**: <https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit>
 - **Examples**: [examples/](examples/) directory
-- **Issues**: https://github.com/KARTIKrocks/go-ratelimit/issues
-- **Discussions**: https://github.com/KARTIKrocks/go-ratelimit/discussions
+- **Issues**: <https://github.com/KARTIKrocks/go-ratelimit/issues>
+- **Discussions**: <https://github.com/KARTIKrocks/go-ratelimit/discussions>
 
 Happy rate limiting! 🚀

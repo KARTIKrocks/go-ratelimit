@@ -1,6 +1,6 @@
 # Package Structure
 
-```
+```text
 ratelimit/
 ├── README.md                   # Main documentation
 ├── LICENSE                     # MIT License
@@ -253,6 +253,6 @@ limiter := redisstore.NewRedisTokenBucket(adapter, "myapp", 10.0, 20)
 
 ## Support and Resources
 
-- **Documentation**: https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit
-- **Issues**: https://github.com/KARTIKrocks/go-ratelimit/issues
-- **Discussions**: https://github.com/KARTIKrocks/go-ratelimit/discussions
+- **Documentation**: <https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit>
+- **Issues**: <https://github.com/KARTIKrocks/go-ratelimit/issues>
+- **Discussions**: <https://github.com/KARTIKrocks/go-ratelimit/discussions>
