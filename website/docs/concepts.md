@@ -112,7 +112,9 @@ it might:
 
 `Reset` returns a limiter to its starting state — a full bucket, or an empty
 window. On a keyed limiter, `Reset(key)` forgets one key and `ResetAll()`
-forgets every key.
+forgets every key. The Redis limiters can only reset all keys when their client
+implements `KeyDeleter`; otherwise `ResetAll` reports `ErrResetAllUnsupported` to
+the error handler and deletes nothing. See [Resetting](./redis.md#resetting).
 
 ## Thread safety
 

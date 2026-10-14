@@ -43,11 +43,16 @@ a later one denies. `Multi` itself is not a `ResultLimiter`, so nesting one
 
 ## Waiting
 
-`WaitN` on a `Multi` waits for the **longest** `RetryAfter` reported by the
-limiters that denied, then checks all of them again. It returns
-`ErrExceedsLimit` straight away if `n` is larger than any limiter's capacity,
-as reported in `Result.Limit`. Built-in limiters always set it; a custom
-`ResultLimiter` that leaves it zero makes `WaitN` retry until the context ends.
+When every limiter implements `ResultLimiter`, `WaitN` on a `Multi` waits for
+the **longest** `RetryAfter` reported by the limiters that denied, then checks
+all of them again. It returns `ErrExceedsLimit` straight away if `n` is larger
+than any limiter's capacity, as reported in `Result.Limit`. Built-in limiters
+always set it; a custom `ResultLimiter` that leaves it zero makes `WaitN` retry
+until the context ends.
+
+Otherwise `WaitN` calls each limiter's `WaitN` in turn, so earlier limiters are
+consumed while later ones are still being waited on, and nothing is undone if
+a later wait fails.
 
 ## Concurrency
 
