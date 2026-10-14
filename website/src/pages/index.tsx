@@ -252,8 +252,8 @@ function Performance(): ReactNode {
       <div className="container">
         <h2 className={styles.sectionTitle}>Performance</h2>
         <p className={styles.sectionLead}>
-          Measured on an Intel i5-11400H (12 cores), Go 1.27, Linux. Every
-          in-memory limiter decides a request without allocating.
+          Measured on an Intel i5-11400H (12 cores), Go 1.27, Linux. Once a key
+          exists, every in-memory limiter decides a request without allocating.
         </p>
 
         <div className={styles.stats}>

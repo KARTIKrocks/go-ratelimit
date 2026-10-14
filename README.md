@@ -57,7 +57,8 @@ SlidingWindowCounter.Allow  74 ns/op    0 allocs
 Contended Allow            104 ns/op    0 allocs   (12 goroutines, one bucket)
 ```
 
-Every in-memory limiter decides a request without allocating. Reproduce with
+Once a key exists, every in-memory limiter decides a request without
+allocating; a keyed limiter allocates one entry the first time it sees a key. Reproduce with
 `go test -bench=. -benchmem ./...` — full numbers in [Benchmarks](#benchmarks)
 below.
 

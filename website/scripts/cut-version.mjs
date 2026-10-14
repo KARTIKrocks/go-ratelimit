@@ -48,7 +48,7 @@ if (!version) {
   fail('missing version argument\n\n  usage: npm run cut-version -- 1.8\n');
 }
 
-if (!/^\d+\.\d+$/.test(version)) {
+if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
   fail(
     `"${version}" is not a MAJOR.MINOR version.\n\n` +
       '  Snapshots are cut per minor release only — "1.8", not "1.8.0" or "v1.8".\n' +

@@ -86,7 +86,7 @@ ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 defer cancel()
 
 if err := limiter.Wait(ctx, "user:42"); err != nil {
-    return err // ctx.Err(), or a validation error for n
+    return err // ctx.Err(), a validation error for n, or a Redis error when failing closed
 }
 ```
 

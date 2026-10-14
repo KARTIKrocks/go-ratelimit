@@ -61,9 +61,11 @@ decision. Record errors yourself from the Redis
 [error handler](./redis.md#when-redis-fails):
 
 ```go
-redisstore.WithErrorHandler(func(err error) {
-    metrics.RecordError("api")
-})
+limiter := redisstore.NewRedisTokenBucket(store, "myapp", 10, 20,
+    redisstore.WithErrorHandler(func(err error) {
+        metrics.RecordError("api")
+    }),
+)
 ```
 
 ## Prometheus
