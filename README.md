@@ -1,21 +1,79 @@
-# ratelimit
+<!-- The centred logo block opens the file, so there is no h1 on line 1. -->
+<!-- markdownlint-disable-next-line MD041 -->
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="website/static/img/logo-dark.svg">
+    <img src="website/static/img/logo.svg" alt="go-ratelimit" width="104" height="104">
+  </picture>
+</p>
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/KARTIKrocks/go-ratelimit.svg)](https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit)
-[![Go Report Card](https://goreportcard.com/badge/github.com/KARTIKrocks/go-ratelimit)](https://goreportcard.com/report/github.com/KARTIKrocks/go-ratelimit)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<h1 align="center">go-ratelimit</h1>
 
-A production-ready, high-performance rate limiting library for Go with multiple algorithms, distributed support, and comprehensive middleware.
+<p align="center">
+  A production-ready rate limiting library for Go with five algorithms,
+  per-key limits, Redis-backed distributed limiters, and HTTP middleware.
+</p>
+
+<p align="center">
+  <a href="https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit"><img src="https://pkg.go.dev/badge/github.com/KARTIKrocks/go-ratelimit.svg" alt="Go Reference"></a>
+  <a href="https://github.com/KARTIKrocks/go-ratelimit/releases"><img src="https://img.shields.io/github/v/tag/KARTIKrocks/go-ratelimit?filter=v*&amp;label=release" alt="Latest release"></a>
+  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/KARTIKrocks/go-ratelimit" alt="Go version"></a>
+  <a href="https://github.com/KARTIKrocks/go-ratelimit/actions/workflows/ci.yml"><img src="https://github.com/KARTIKrocks/go-ratelimit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/KARTIKrocks/go-ratelimit"><img src="https://codecov.io/gh/KARTIKrocks/go-ratelimit/branch/main/graph/badge.svg" alt="Coverage"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/KARTIKrocks/go-ratelimit" alt="License: MIT"></a>
+</p>
+
+<p align="center">
+  <b><a href="https://kartikrocks.github.io/go-ratelimit/">Documentation</a></b> ·
+  <b><a href="https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit">API Reference</a></b> ·
+  <b><a href="CHANGELOG.md">Changelog</a></b>
+</p>
+
+## Why go-ratelimit?
+
+`golang.org/x/time/rate` gives you one token bucket. Rate limiting a real
+service needs more than that:
+
+| Capability | go-ratelimit | `x/time/rate` |
+| - | - | - |
+| Token bucket | ✓ | ✓ |
+| Leaky bucket, fixed window, sliding window log & counter | ✓ | You build it |
+| Per-key limits with idle cleanup and an LRU key cap | ✓ | You build it |
+| One limit shared across instances (Redis, Cluster-safe) | ✓ | You build it |
+| `net/http` middleware with `X-RateLimit-*` / `Retry-After` | ✓ | You build it |
+| Proxy-aware client IP with a trusted-proxy list | ✓ | You build it |
+| Composite limits (per second _and_ per hour) | ✓ | You build it |
+| Prometheus metrics | ✓ | You build it |
+
+Every limiter — in memory or in Redis — implements the same interfaces, so
+changing algorithm or going distributed is a one-line change.
+
+## Performance
+
+```text
+TokenBucket.Allow           50 ns/op    0 allocs
+KeyedTokenBucket.Allow      74 ns/op    0 allocs
+SlidingWindowCounter.Allow  74 ns/op    0 allocs
+Contended Allow            104 ns/op    0 allocs   (12 goroutines, one bucket)
+```
+
+Every in-memory limiter decides a request without allocating. Reproduce with
+`go test -bench=. -benchmem ./...` — full numbers in [Benchmarks](#benchmarks)
+below.
 
 ## Features
 
-- 🚀 **Multiple Algorithms**: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window Log, Sliding Window Counter
-- 🌍 **Distributed Support**: Redis-backed limiters for multi-instance deployments
-- 🔌 **HTTP Middleware**: Ready-to-use middleware for popular frameworks
-- 📊 **Observability**: Built-in metrics and Prometheus integration
-- ⚡ **High Performance**: Minimal allocations, concurrent-safe operations
-- 🛡️ **Production Ready**: Comprehensive error handling, graceful degradation
-- 🎯 **Flexible**: Per-key limiting, composite limiters, custom backends
-- 📦 **Zero Dependencies**: Core package has no external dependencies
+- **Five Algorithms**: Token bucket, leaky bucket, fixed window, sliding window log, sliding window counter
+- **Per-Key Limiting**: Independent limits per user, IP, or API key, with idle cleanup and an LRU cap on tracked keys
+- **Distributed**: Redis-backed limiters using atomic Lua scripts and Redis server time; Redis Cluster safe
+- **Fail Open or Closed**: Choose what happens when Redis is unreachable, and observe every error
+- **HTTP Middleware**: `net/http` middleware with standard rate limit headers, custom responses, and skip rules
+- **Proxy-Aware Keys**: Safe `RemoteAddr` default, opt-in `X-Forwarded-For` handling that only trusts listed proxies; IPv6 keyed by /64 (next release)
+- **Per-Path Limits**: A strict limit on `/login`, a generous one everywhere else
+- **Composite Limits**: Several limits checked before any is consumed
+- **Observability**: Instrumented wrappers and Prometheus counters in the `metrics` module
+- **Zero Dependencies**: The core package uses only the standard library
+- **Thread Safe**: Every limiter is safe for concurrent use
 
 ## Installation
 
@@ -23,38 +81,20 @@ A production-ready, high-performance rate limiting library for Go with multiple 
 go get github.com/KARTIKrocks/go-ratelimit
 ```
 
-## Quick Start
+Optional modules, each with its own dependencies:
 
-### Basic Usage
-
-```go
-package main
-
-import (
-    "fmt"
-    "time"
-
-    "github.com/KARTIKrocks/go-ratelimit"
-)
-
-func main() {
-    // Create a token bucket limiter: 100 requests per minute, burst of 10
-    limiter := ratelimit.NewTokenBucket(100.0/60.0, 10)
-
-    if limiter.Allow() {
-        fmt.Println("Request allowed")
-    } else {
-        fmt.Println("Rate limit exceeded")
-    }
-}
+```bash
+go get github.com/KARTIKrocks/go-ratelimit/redisstore  # Redis-backed limiters
+go get github.com/KARTIKrocks/go-ratelimit/metrics     # Prometheus metrics
 ```
 
-### HTTP Middleware
+## Quick Start
 
 ```go
 package main
 
 import (
+    "log"
     "net/http"
     "time"
 
@@ -62,414 +102,165 @@ import (
 )
 
 func main() {
-    // Create a keyed limiter (per-IP)
-    limiter := ratelimit.NewKeyedTokenBucket(10.0, 20, time.Minute)
+    // 10 requests/s per client, bursts of 20. Idle clients are cleaned up
+    // every minute.
+    limiter := ratelimit.NewKeyedTokenBucket(10, 20, time.Minute)
+    defer limiter.Close()
 
-    // Wrap your handler
     mux := http.NewServeMux()
-    mux.HandleFunc("/api", apiHandler)
+    mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("ok"))
+    })
 
-    // Apply rate limiting middleware
     handler := ratelimit.Middleware(limiter,
-        ratelimit.WithKeyFunc(ratelimit.IPKeyFunc),
         ratelimit.WithOnLimitReached(ratelimit.JSONOnLimitReached),
+        ratelimit.WithSkipFunc(ratelimit.SkipHealthChecks),
     )(mux)
 
-    http.ListenAndServe(":8080", handler)
-}
-
-func apiHandler(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("API response"))
+    log.Fatal(http.ListenAndServe(":8080", handler))
 }
 ```
 
-## Algorithms
-
-### Token Bucket
-
-Best for: APIs with burst traffic, general purpose rate limiting
+Without HTTP:
 
 ```go
-// 100 requests per minute, burst of 20
-limiter := ratelimit.NewTokenBucket(100.0/60.0, 20)
-```
+limiter := ratelimit.NewTokenBucket(10, 20) // 10/s, burst of 20
 
-**Pros**: Allows bursts, smooth rate limiting  
-**Cons**: More complex than fixed window
-
-### Leaky Bucket
-
-Best for: Smooth, consistent rate limiting without bursts
-
-```go
-// 10 requests per second, queue capacity of 50
-limiter := ratelimit.NewLeakyBucket(10.0, 50)
-```
-
-**Pros**: Smooth rate, no bursts  
-**Cons**: Queues requests, may add latency
-
-### Fixed Window
-
-Best for: Simple counting, memory-efficient
-
-```go
-// 1000 requests per hour
-limiter := ratelimit.NewFixedWindow(1000, time.Hour)
-```
-
-**Pros**: Simple, memory efficient  
-**Cons**: Boundary issues (2x burst at window edges)
-
-### Sliding Window
-
-Best for: Accurate rate limiting without boundary issues
-
-```go
-// 100 requests per minute
-limiter := ratelimit.NewSlidingWindowCounter(100, time.Minute)
-```
-
-**Pros**: Accurate, no boundary issues  
-**Cons**: Slightly more memory than fixed window
-
-## Per-Key Rate Limiting
-
-All algorithms support per-key limiting (e.g., per-user, per-IP):
-
-```go
-// Create keyed limiter
-limiter := ratelimit.NewKeyedTokenBucket(
-    10.0,           // rate per second
-    20,             // burst
-    time.Minute,    // cleanup interval
-)
-
-// Different keys get independent limits
-limiter.Allow("user:123")
-limiter.Allow("user:456")
-limiter.Allow("ip:192.168.1.1")
-```
-
-## Distributed Rate Limiting (Redis)
-
-For multi-instance deployments:
-
-```go
-import (
-    "github.com/redis/go-redis/v9"
-    "github.com/KARTIKrocks/go-ratelimit/redisstore"
-)
-
-// Create Redis client
-client := redis.NewClient(&redis.Options{
-    Addr: "localhost:6379",
-})
-
-// Create distributed limiter
-adapter := redisstore.NewRedisClientAdapter(client)
-limiter := redisstore.NewRedisTokenBucket(
-    adapter,
-    "myapp",    // key prefix
-    10.0,       // rate per second
-    20,         // burst
-)
-
-// Use normally - works across all instances
-limiter.Allow("user:123")
-
-// Context-aware operations (for cancellation/timeouts)
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-defer cancel()
-result := limiter.TakeNCtx(ctx, "user:123", 1)
-```
-
-## HTTP Middleware Options
-
-### Custom Key Functions
-
-```go
-// By IP address (default, uses RemoteAddr - safe, not spoofable).
-// All IP key functions key IPv6 clients by their /64 network, since one
-// client usually controls a whole /64.
-ratelimit.WithKeyFunc(ratelimit.IPKeyFunc)
-
-// By IP from proxy headers, behind exactly one proxy (opt-in; uses the
-// rightmost X-Forwarded-For entry, then X-Real-IP/CF-Connecting-IP)
-ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc)
-
-// By IP behind one or more known proxies: headers are only honored when the
-// request comes from a trusted proxy, and trusted hops are skipped
-ratelimit.WithKeyFunc(ratelimit.TrustedProxiesKeyFunc("10.0.0.0/8"))
-
-// By header; requests without it are keyed by client IP
-ratelimit.WithKeyFunc(ratelimit.HeaderKeyFunc("X-API-Key"))
-
-// By user ID from context
-ratelimit.WithKeyFunc(ratelimit.UserIDKeyFunc("userID"))
-
-// By path
-ratelimit.WithKeyFunc(ratelimit.PathKeyFunc)
-
-// Composite (IP + Path)
-ratelimit.WithKeyFunc(ratelimit.IPPathKeyFunc)
-```
-
-### Custom Responses
-
-```go
-// JSON response (built-in, 429 status)
-ratelimit.WithOnLimitReached(ratelimit.JSONOnLimitReached)
-
-// JSON response with custom status code
-ratelimit.WithOnLimitReached(ratelimit.JSONOnLimitReachedWithCode(http.StatusServiceUnavailable))
-
-// Fully custom response
-ratelimit.WithOnLimitReached(func(w http.ResponseWriter, r *http.Request, result ratelimit.Result) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusTooManyRequests)
-    fmt.Fprintf(w, `{"error":"slow down!","retry_after":%d}`,
-        int(math.Ceil(result.RetryAfter.Seconds())))
-})
-```
-
-### Skip Conditions
-
-```go
-// Skip health checks
-ratelimit.WithSkipFunc(ratelimit.SkipHealthChecks)
-
-// Skip private IPs
-ratelimit.WithSkipFunc(ratelimit.SkipPrivateIPs)
-
-// Skip specific paths
-ratelimit.WithSkipFunc(ratelimit.SkipPaths("/metrics", "/health"))
-
-// Combine multiple conditions
-ratelimit.WithSkipFunc(ratelimit.SkipIf(
-    ratelimit.SkipHealthChecks,
-    ratelimit.SkipPrivateIPs,
-))
-```
-
-## Different Limits Per Path
-
-```go
-// Create path-based limiter
-pathLimiter := ratelimit.NewPathLimiter(
-    defaultLimiter, // fallback for unlisted paths
-)
-
-// Add specific limits
-pathLimiter.Add("/api/expensive", strictLimiter)
-pathLimiter.Add("/api/login", loginLimiter)
-
-// Use as middleware
-handler := pathLimiter.Middleware()(yourHandler)
-```
-
-## Metrics and Monitoring
-
-### Built-in Metrics
-
-```go
-import "github.com/KARTIKrocks/go-ratelimit/metrics"
-
-// Create limiter with metrics
-limiter := ratelimit.NewKeyedTokenBucket(10.0, 20, time.Minute)
-metricsLimiter := metrics.NewInstrumented(limiter, "api")
-
-// Metrics are automatically collected
-metricsLimiter.Allow("user:123")
-
-// Get metrics
-stats := metrics.GetStats("api")
-fmt.Printf("Allowed: %d, Denied: %d\n", stats.Allowed, stats.Denied)
-```
-
-### Prometheus Integration
-
-```go
-import (
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/KARTIKrocks/go-ratelimit/metrics"
-)
-
-// Register Prometheus metrics
-metrics.RegisterPrometheus(prometheus.DefaultRegisterer)
-
-// Use instrumented limiter
-limiter := metrics.NewInstrumented(baseLimiter, "api")
-
-// Metrics available at /metrics endpoint
-```
-
-## Advanced Features
-
-### Composite Limiters
-
-Combine multiple limiters with AND logic:
-
-```go
-// Both limits must allow the request
-multi := ratelimit.NewMulti(
-    perSecondLimiter,
-    perMinuteLimiter,
-    perHourLimiter,
-)
-
-if multi.Allow() {
-    // Request allowed by all limiters
+if limiter.Allow() {
+    // proceed
 }
-```
 
-### Waiting for Availability
-
-```go
-ctx := context.Background()
-
-// Block until request is allowed (or context cancelled)
-if err := limiter.Wait(ctx, "user:123"); err != nil {
-    // Context cancelled or deadline exceeded
+// Or block until allowed
+if err := limiter.Wait(ctx); err != nil {
     return err
 }
-
-// Request is now allowed
-processRequest()
 ```
 
-### Detailed Results
+Sharing one limit across every instance:
 
 ```go
-result := limiter.Take("user:123")
-
-fmt.Printf("Allowed: %v\n", result.Allowed)
-fmt.Printf("Limit: %d\n", result.Limit)
-fmt.Printf("Remaining: %d\n", result.Remaining)
-fmt.Printf("Retry After: %v\n", result.RetryAfter)
-fmt.Printf("Reset At: %v\n", result.ResetAt)
-```
-
-## Configuration Best Practices
-
-### API Rate Limiting
-
-```go
-// Public endpoints: 100 req/min per IP
-publicLimiter := ratelimit.NewKeyedTokenBucket(100.0/60.0, 10, time.Minute)
-
-// Authenticated: 1000 req/min per user
-authLimiter := ratelimit.NewKeyedTokenBucket(1000.0/60.0, 50, time.Minute)
-
-// Expensive operations: 10 req/min per user
-expensiveLimiter := ratelimit.NewKeyedTokenBucket(10.0/60.0, 2, time.Minute)
-```
-
-### Distributed Systems
-
-```go
-// Use Redis for shared state across instances
+client := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 limiter := redisstore.NewRedisTokenBucket(
-    adapter,
-    "prod:api",
-    100.0/60.0,
-    20,
+    redisstore.NewRedisClientAdapter(client), "myapp", 10, 20,
+    redisstore.WithErrorHandler(func(err error) { slog.Error("ratelimit", "err", err) }),
 )
 ```
 
-### Memory Management
+> **Note:** behind a load balancer or CDN, `RemoteAddr` is the proxy, so every
+> client shares one limit. Use `TrustedProxiesKeyFunc` with your proxies'
+> networks — see
+> [Key Functions → Behind a reverse proxy](https://kartikrocks.github.io/go-ratelimit/docs/key-functions#behind-a-reverse-proxy).
 
-```go
-// Set cleanup interval to remove inactive keys
-limiter := ratelimit.NewKeyedTokenBucket(
-    10.0,
-    20,
-    5*time.Minute, // cleanup every 5 minutes
-)
+## Documentation
 
-// Cap tracked keys to bound memory. When full, the least recently used key
-// is evicted, so a flood of new keys can't lock out existing users.
-limiter.SetMaxKeys(10000)
+Full guides live at **[kartikrocks.github.io/go-ratelimit](https://kartikrocks.github.io/go-ratelimit/)**:
 
-// Don't forget to close on shutdown
-defer limiter.Close()
-```
+| Guide | Covers |
+| --- | --- |
+| [Getting Started](https://kartikrocks.github.io/go-ratelimit/docs/getting-started) | Install and rate limit an HTTP server |
+| [Core Concepts](https://kartikrocks.github.io/go-ratelimit/docs/concepts) | `Allow`, `Check`, `Take`, `Wait`, and `Result` |
+| [Choosing an Algorithm](https://kartikrocks.github.io/go-ratelimit/docs/algorithms) | Bursts, accuracy, and memory compared |
+| [Token Bucket](https://kartikrocks.github.io/go-ratelimit/docs/token-bucket) | Steady rate with a burst allowance |
+| [Leaky Bucket](https://kartikrocks.github.io/go-ratelimit/docs/leaky-bucket) | Meter-style bucket and how it relates to the token bucket |
+| [Fixed Window](https://kartikrocks.github.io/go-ratelimit/docs/fixed-window) | Clock-aligned windows and the boundary burst |
+| [Sliding Window](https://kartikrocks.github.io/go-ratelimit/docs/sliding-window) | Exact log and constant-memory counter |
+| [Keyed Limiters](https://kartikrocks.github.io/go-ratelimit/docs/keyed-limiters) | Per-key limits, cleanup, and the LRU key cap |
+| [Composite Limits](https://kartikrocks.github.io/go-ratelimit/docs/multi) | Tiered limits that consume only when all allow |
+| [HTTP Middleware](https://kartikrocks.github.io/go-ratelimit/docs/middleware) | Options, headers, responses, and skip rules |
+| [Key Functions](https://kartikrocks.github.io/go-ratelimit/docs/key-functions) | Client IP, proxies, API keys, and users |
+| [Path Limits](https://kartikrocks.github.io/go-ratelimit/docs/path-limits) | Different limits for different routes |
+| [Redis](https://kartikrocks.github.io/go-ratelimit/docs/redis) | Distributed limits, Cluster, and failure modes |
+| [Metrics](https://kartikrocks.github.io/go-ratelimit/docs/metrics) | Instrumented wrappers and Prometheus |
+| [Errors](https://kartikrocks.github.io/go-ratelimit/docs/errors) | Sentinel errors and invalid request sizes |
 
-## Error Handling
+Exact type signatures are generated from source on
+[pkg.go.dev](https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit).
 
-The library provides graceful degradation:
+Runnable programs are in [`examples/`](examples/) — basic, multitier, redis,
+and prometheus.
 
-```go
-// Redis errors won't crash your app
-limiter := redisstore.NewRedisTokenBucket(adapter, "app", 10.0, 20)
+## Benchmarks
 
-// If Redis is down, requests fail open (allowed) by default
-// This prevents Redis outages from blocking all traffic
-result := limiter.Take("user:123")
-// result.Allowed == true when Redis is unreachable
-
-// To deny requests instead, and to see errors (for logs or metrics):
-limiter = redisstore.NewRedisTokenBucket(adapter, "app", 10.0, 20,
-    redisstore.WithFailClosed(),
-    redisstore.WithErrorHandler(func(err error) {
-        log.Printf("rate limiter: %v", err)
-        metrics.RecordError("api")
-    }),
-)
-```
-
-The Redis limiters read the time from Redis itself, so clock differences
-between your servers don't matter. Each rate-limit key is stored in a single
-Redis key, so they work with Redis Cluster. Windows have millisecond precision
-and must be at least 1ms.
-
-## Examples
-
-See the [examples](examples/) directory for complete working examples:
-
-- [Basic HTTP Server](examples/basic/main.go)
-- [Redis Distributed](examples/redis/main.go)
-- [Multi-tier Limits](examples/multitier/main.go)
-- [Prometheus Metrics](examples/prometheus/main.go)
-
-## Testing
-
-Run tests:
-
-```bash
-go test ./...
-```
-
-Run with race detector:
-
-```bash
-go test -race ./...
-```
-
-Run benchmarks:
+Measured on an Intel i5-11400H @ 2.70GHz (12 cores), Go 1.27, Linux; median of
+three runs.
 
 ```bash
 go test -bench=. -benchmem ./...
 ```
 
-## Contributing
+### Single limiters
 
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+| Benchmark | Single goroutine | 12 goroutines, one limiter | Allocs |
+| --- | --- | --- | --- |
+| `TokenBucket.Allow` | 49.7 ns/op | 103.5 ns/op | 0 |
+| `LeakyBucket.Allow` | 50.8 ns/op | 103.4 ns/op | 0 |
+| `FixedWindow.Allow` | 52.7 ns/op | 105.3 ns/op | 0 |
+| `SlidingWindow.Allow` (log) | 46.7 ns/op | — | 0 |
+| `SlidingWindowCounter.Allow` | 73.8 ns/op | 125.0 ns/op | 0 |
+
+### Keyed limiters
+
+| Benchmark | ns/op | Allocs |
+| --- | --- | --- |
+| `KeyedTokenBucket.Allow` | 74.1 | 0 |
+| `KeyedTokenBucket.Allow`, 12 goroutines | 143.3 | 0 |
+| `KeyedTokenBucket.Allow`, many keys | 73.6 | 0 |
+| `KeyedLeakyBucket.Allow` | 74.6 | 0 |
+| `KeyedFixedWindow.Allow` | 81.4 | 0 |
+| `KeyedSlidingWindow.Allow` | 101.8 | 0 |
+
+### HTTP middleware
+
+| Benchmark | ns/op | B/op | Allocs |
+| --- | --- | --- | --- |
+| `Middleware`, full request through `ServeHTTP` | ~1,100 | 1,056 | 14 |
+
+The middleware figure includes allocating an `httptest.ResponseRecorder` and
+its header map for every request, which a real server does in `net/http`
+regardless of rate limiting.
+
+## Thread Safety
+
+Every limiter is safe for concurrent use. The in-memory limiters guard their
+state with a mutex; the Redis limiters run each decision as one atomic Lua
+script, so instances never race each other.
+
+## Security
+
+A rate limiter is a security control, so its defaults are chosen to be safe
+rather than convenient:
+
+- **Client IPs come from `RemoteAddr` by default.** Proxy headers are opt-in,
+  and `TrustedProxiesKeyFunc` only honours them on requests that actually come
+  from a proxy you listed.
+- **IPv6 clients are keyed by their /64 network** (next release; v1.1.0 keys
+  each address separately), so a client cannot rotate through its own address
+  block to reset its limit.
+- **Key-set growth is bounded** by `SetMaxKeys`, so a flood of new keys cannot
+  exhaust memory.
+- **Redis failures are observable**, and can fail closed for limits that guard
+  against abuse.
+
+Every push and pull request to `main` is scanned by
+[CodeQL](https://github.com/KARTIKrocks/go-ratelimit/actions/workflows/codeql.yml),
+and `govulncheck` gates every merge on advisories reachable from this code's
+call graph — run separately against the root module, `redisstore`, and
+`metrics`, because a scan started from the root stops at nested `go.mod`
+boundaries.
+
+See [SECURITY.md](SECURITY.md) for supported versions and how to report a
+vulnerability privately.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+[MIT](LICENSE)
+
+## Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Credits
 
-Inspired by:
-
-- [golang.org/x/time/rate](https://pkg.go.dev/golang.org/x/time/rate)
-- [Stripe's rate limiting architecture](https://stripe.com/blog/rate-limiters)
-- [Token Bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket)
-
-## Support
-
-- 📚 [Documentation](https://pkg.go.dev/github.com/KARTIKrocks/go-ratelimit)
-- 🐛 [Issue Tracker](https://github.com/KARTIKrocks/go-ratelimit/issues)
-- 💬 [Discussions](https://github.com/KARTIKrocks/go-ratelimit/discussions)
+Inspired by [golang.org/x/time/rate](https://pkg.go.dev/golang.org/x/time/rate),
+[Stripe's rate limiter design](https://stripe.com/blog/rate-limiters), and the
+[token bucket algorithm](https://en.wikipedia.org/wiki/Token_bucket).

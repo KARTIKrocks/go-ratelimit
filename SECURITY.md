@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.x.x   | :white_check_mark: |
+| 1.x.x   | :white_check_mark: |
+| 0.x.x   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -28,6 +29,7 @@ Please include:
 ### Input Validation
 
 #### Key Validation
+
 - Keys should be validated before use
 - Avoid keys that could cause hash collisions
 - Consider key length limits
@@ -47,6 +49,7 @@ func validateKey(key string) error {
 ```
 
 #### Rate/Limit Validation
+
 - Validate rate and limit parameters
 - Prevent integer overflow
 - Check for negative values
@@ -59,6 +62,7 @@ func validateKey(key string) error {
 **Risk**: Unlimited key creation can exhaust memory
 
 **Mitigation**:
+
 - Use cleanup intervals to remove inactive keys
 - Set maximum number of active keys with `SetMaxKeys`
 - Monitor memory usage
@@ -80,6 +84,7 @@ defer limiter.Close()
 **Risk**: Excessive rate limit checks can consume CPU
 
 **Mitigation**:
+
 - Efficient algorithms with O(1) operations
 - Use Redis for distributed scenarios
 - Consider sampling for very high traffic
@@ -90,6 +95,7 @@ defer limiter.Close()
 **Risk**: Slow requests can exhaust resources
 
 **Mitigation**:
+
 - Use WaitMiddleware with timeouts
 - Configure HTTP server timeouts
 - Monitor connection durations
@@ -162,6 +168,7 @@ ratelimit.WithKeyFunc(ratelimit.TrustedProxyKeyFunc)
 **Risk**: Distributed attacks from multiple IPs
 
 **Mitigation**:
+
 - Implement global rate limits
 - Use composite limiters
 - Monitor traffic patterns
@@ -183,6 +190,7 @@ multi := ratelimit.NewMulti(
 **Risk**: Attackers may enumerate valid keys
 
 **Mitigation**:
+
 - Use consistent response times
 - Don't leak information in error messages
 - Use rate limiting on authentication endpoints
@@ -195,6 +203,7 @@ multi := ratelimit.NewMulti(
 **Risk**: Headers may reveal system information
 
 **Mitigation**:
+
 ```go
 // Disable headers in production if needed
 ratelimit.WithHeaders(false)
@@ -205,6 +214,7 @@ ratelimit.WithHeaders(false)
 **Risk**: Detailed errors may leak system information
 
 **Mitigation**:
+
 ```go
 // Use generic error messages
 func safeOnLimitReached(w http.ResponseWriter, r *http.Request, result ratelimit.Result) {
@@ -218,6 +228,7 @@ func safeOnLimitReached(w http.ResponseWriter, r *http.Request, result ratelimit
 **Risk**: Response time differences may reveal information
 
 **Mitigation**:
+
 - Use constant-time comparisons for sensitive operations
 - Add random delays if necessary
 - Don't leak information via timing
@@ -253,6 +264,7 @@ handler := ratelimit.Middleware(limiter,
 ### Monitoring
 
 Monitor for:
+
 - High rate limit hit rates
 - Unusual traffic patterns
 - Memory usage growth

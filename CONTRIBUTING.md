@@ -198,7 +198,7 @@ func BenchmarkTokenBucket_Allow(b *testing.B) {
 
 Example:
 
-```
+```text
 Add sliding window counter algorithm
 
 Implements sliding window counter for more accurate rate limiting

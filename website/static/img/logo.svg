@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="go-ratelimit">
+  <title>go-ratelimit</title>
+  <g fill="none" stroke-width="6" stroke-linecap="round">
+    <path d="M12.95 48.0 A22 22 0 1 1 52.4 28.76" stroke="#7c3aed"/>
+    <path d="M53.79 33.94 A22 22 0 0 1 51.05 48.0" stroke="#d946ef"/>
+  </g>
+  <path d="M32 37 40.39 23.57" stroke="#d946ef" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32" cy="37" r="5.5" fill="#7c3aed"/>
+</svg>

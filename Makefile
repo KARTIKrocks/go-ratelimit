@@ -1,12 +1,15 @@
 include common.mk
 
+MARKDOWNLINT := website/node_modules/.bin/markdownlint-cli2
+MARKDOWN_FILES = $(shell git ls-files -co --exclude-standard -- '*.md' '*.mdx')
+
 # Nested modules. Each has its own go.mod, so the root module's ./... does not
 # reach them — they need to be built and tested explicitly. They resolve the
 # root module through `replace` directives and go.work.
 SUBMODULES := redisstore metrics
 EXAMPLE_MODULES := examples/basic examples/multitier examples/redis examples/prometheus
 
-.PHONY: all setup deps tidy tidy-modules tidy-check test test-v test-race test-modules test-integration vet vet-modules lint lint-modules lint-fix fix vuln vuln-modules build build-examples bench bench-compare fmt fmt-check cover clean ci pre-commit help
+.PHONY: all setup deps tidy tidy-modules tidy-check test test-v test-race test-modules test-integration vet vet-modules lint lint-modules lint-fix fix vuln vuln-modules build build-examples bench bench-compare fmt fmt-check cover clean lint-docs lint-docs-fix ci pre-commit help
 
 all: fmt vet vet-modules lint lint-modules test test-modules build build-examples
 
@@ -151,7 +154,19 @@ clean:
 ## Quick checks before committing
 pre-commit: fmt vet lint test
 
-## Everything the CI merge gate checks, in one target.
+## Lint every Markdown file in the repo (needs Node)
+lint-docs: $(MARKDOWNLINT)
+	@$(MARKDOWNLINT) $(MARKDOWN_FILES)
+
+## Lint Markdown and apply automatic fixes
+lint-docs-fix: $(MARKDOWNLINT)
+	@$(MARKDOWNLINT) --fix $(MARKDOWN_FILES)
+
+$(MARKDOWNLINT): website/package-lock.json
+	cd website && npm ci
+	@touch $@
+
+## The Go checks of the CI merge gate. Markdown lint is separate: make lint-docs
 ci: fmt-check vet vet-modules lint lint-modules test test-modules build build-examples vuln vuln-modules
 
 ## Show available targets
