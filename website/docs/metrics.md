@@ -78,12 +78,12 @@ metrics.RegisterPrometheus(prometheus.DefaultRegisterer)
 mux.Handle("/metrics", promhttp.Handler())
 ```
 
-| Metric | Labels | Counts |
-| --- | --- | --- |
-| `ratelimit_requests_total` | `limiter`, `result` (`allowed` / `denied`) | every recorded check |
-| `ratelimit_requests_allowed_total` | `limiter` | allowed checks |
-| `ratelimit_requests_denied_total` | `limiter` | denied checks |
-| `ratelimit_errors_total` | `limiter` | recorded errors |
+| Metric                             | Labels                                     | Counts               |
+| ---------------------------------- | ------------------------------------------ | -------------------- |
+| `ratelimit_requests_total`         | `limiter`, `result` (`allowed` / `denied`) | every recorded check |
+| `ratelimit_requests_allowed_total` | `limiter`                                  | allowed checks       |
+| `ratelimit_requests_denied_total`  | `limiter`                                  | denied checks        |
+| `ratelimit_errors_total`           | `limiter`                                  | recorded errors      |
 
 The `limiter` label is the name you gave the wrapper. A useful alert is the
 denial ratio per limiter:

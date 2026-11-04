@@ -12,12 +12,12 @@ way.
 
 ## The four interfaces
 
-| Interface | For | Methods |
-| --- | --- | --- |
-| `Limiter` | one shared limit | `Allow`, `AllowN`, `Wait`, `WaitN`, `Reset` |
-| `ResultLimiter` | one shared limit, with detail | `Check`, `CheckN`, `Take`, `TakeN` |
-| `KeyedLimiter` | a limit per key | `Allow`, `AllowN`, `Wait`, `WaitN`, `Reset`, `ResetAll` — each taking a key |
-| `KeyedResultLimiter` | a limit per key, with detail | `Check`, `CheckN`, `Take`, `TakeN` — each taking a key |
+| Interface            | For                           | Methods                                                                     |
+| -------------------- | ----------------------------- | --------------------------------------------------------------------------- |
+| `Limiter`            | one shared limit              | `Allow`, `AllowN`, `Wait`, `WaitN`, `Reset`                                 |
+| `ResultLimiter`      | one shared limit, with detail | `Check`, `CheckN`, `Take`, `TakeN`                                          |
+| `KeyedLimiter`       | a limit per key               | `Allow`, `AllowN`, `Wait`, `WaitN`, `Reset`, `ResetAll` — each taking a key |
+| `KeyedResultLimiter` | a limit per key, with detail  | `Check`, `CheckN`, `Take`, `TakeN` — each taking a key                      |
 
 Every single-limit type (`TokenBucket`, `LeakyBucket`, `FixedWindow`,
 `SlidingWindow`, `SlidingWindowCounter`) implements both `Limiter` and
@@ -31,12 +31,12 @@ with the [metrics wrapper](./metrics.md).
 
 ## Allow, Check, Take, Wait
 
-| Method | Consumes? | Blocks? | Returns |
-| --- | --- | --- | --- |
-| `Allow` / `AllowN` | if allowed | no | `bool` |
-| `Take` / `TakeN` | if allowed | no | `Result` |
-| `Check` / `CheckN` | never | no | `Result` |
-| `Wait` / `WaitN` | yes | until allowed or `ctx` is done | `error` |
+| Method             | Consumes?  | Blocks?                        | Returns  |
+| ------------------ | ---------- | ------------------------------ | -------- |
+| `Allow` / `AllowN` | if allowed | no                             | `bool`   |
+| `Take` / `TakeN`   | if allowed | no                             | `Result` |
+| `Check` / `CheckN` | never      | no                             | `Result` |
+| `Wait` / `WaitN`   | yes        | until allowed or `ctx` is done | `error`  |
 
 `Allow` and `Take` make the same decision; `Take` also tells you why. `Check`
 answers "would this be allowed right now?" without spending anything — useful

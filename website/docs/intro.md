@@ -17,28 +17,28 @@ go get github.com/KARTIKrocks/go-ratelimit
 
 ## What you get
 
-| | |
-| --- | --- |
-| **Five algorithms** | Token bucket, leaky bucket, fixed window, sliding window log, sliding window counter |
-| **Per-key limiting** | Independent limits per user, IP, or API key, with idle cleanup and an LRU key cap |
-| **Distributed** | Redis-backed limiters that share one limit across every instance |
-| **HTTP middleware** | `net/http` middleware with `X-RateLimit-*` and `Retry-After` headers |
-| **Proxy-aware keys** | Safe `RemoteAddr` default, opt-in proxy header handling with a trusted-proxy list |
-| **Composite limits** | Several limits checked together; with the built-in limiters, none is consumed unless all allow |
-| **Observability** | Instrumented wrappers and Prometheus counters in the `metrics` module |
-| **Zero dependencies** | The core package uses only the standard library |
-| **Thread safe** | Every limiter is safe for concurrent use |
+|                       |                                                                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| **Five algorithms**   | Token bucket, leaky bucket, fixed window, sliding window log, sliding window counter           |
+| **Per-key limiting**  | Independent limits per user, IP, or API key, with idle cleanup and an LRU key cap              |
+| **Distributed**       | Redis-backed limiters that share one limit across every instance                               |
+| **HTTP middleware**   | `net/http` middleware with `X-RateLimit-*` and `Retry-After` headers                           |
+| **Proxy-aware keys**  | Safe `RemoteAddr` default, opt-in proxy header handling with a trusted-proxy list              |
+| **Composite limits**  | Several limits checked together; with the built-in limiters, none is consumed unless all allow |
+| **Observability**     | Instrumented wrappers and Prometheus counters in the `metrics` module                          |
+| **Zero dependencies** | The core package uses only the standard library                                                |
+| **Thread safe**       | Every limiter is safe for concurrent use                                                       |
 
 ## Modules
 
 The repository holds three Go modules, so you only pull in the dependencies you
 use:
 
-| Module | Import path | Depends on |
-| --- | --- | --- |
-| Core | `github.com/KARTIKrocks/go-ratelimit` | standard library only |
-| Redis | `github.com/KARTIKrocks/go-ratelimit/redisstore` | `github.com/redis/go-redis/v9` |
-| Metrics | `github.com/KARTIKrocks/go-ratelimit/metrics` | `github.com/prometheus/client_golang` |
+| Module  | Import path                                      | Depends on                            |
+| ------- | ------------------------------------------------ | ------------------------------------- |
+| Core    | `github.com/KARTIKrocks/go-ratelimit`            | standard library only                 |
+| Redis   | `github.com/KARTIKrocks/go-ratelimit/redisstore` | `github.com/redis/go-redis/v9`        |
+| Metrics | `github.com/KARTIKrocks/go-ratelimit/metrics`    | `github.com/prometheus/client_golang` |
 
 ## Where to go next
 

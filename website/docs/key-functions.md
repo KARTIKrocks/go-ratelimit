@@ -17,17 +17,17 @@ the limit applies to.
 
 ## Built-in key functions
 
-| Key function | Key |
-| --- | --- |
-| `IPKeyFunc` | client IP from `RemoteAddr` — the default |
-| `TrustedProxyKeyFunc` | client IP from proxy headers, behind exactly one proxy |
-| `TrustedProxiesKeyFunc(cidrs...)` | client IP behind one or more listed proxies |
-| `HeaderKeyFunc(name)` | a header value, such as an API key, falling back to the client IP |
-| `UserIDKeyFunc(ctxKey)` | a user ID stored in the request context, falling back to the client IP |
-| `PathKeyFunc` | the URL path — one shared limit per endpoint |
-| `MethodPathKeyFunc` | method and path, e.g. `POST:/orders` |
-| `IPPathKeyFunc` | client IP and path — a separate limit per client per endpoint |
-| `CompositeKeyFunc(fns...)` | the results of several key functions joined with `:` |
+| Key function                      | Key                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| `IPKeyFunc`                       | client IP from `RemoteAddr` — the default                              |
+| `TrustedProxyKeyFunc`             | client IP from proxy headers, behind exactly one proxy                 |
+| `TrustedProxiesKeyFunc(cidrs...)` | client IP behind one or more listed proxies                            |
+| `HeaderKeyFunc(name)`             | a header value, such as an API key, falling back to the client IP      |
+| `UserIDKeyFunc(ctxKey)`           | a user ID stored in the request context, falling back to the client IP |
+| `PathKeyFunc`                     | the URL path — one shared limit per endpoint                           |
+| `MethodPathKeyFunc`               | method and path, e.g. `POST:/orders`                                   |
+| `IPPathKeyFunc`                   | client IP and path — a separate limit per client per endpoint          |
+| `CompositeKeyFunc(fns...)`        | the results of several key functions joined with `:`                   |
 
 ## Client IP
 

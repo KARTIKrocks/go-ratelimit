@@ -12,11 +12,11 @@ never succeed and for infrastructure failures.
 
 ## Sentinel errors
 
-| Error | Returned by | Meaning |
-| --- | --- | --- |
-| `ErrInvalidN` | `WaitN` | `n` is zero or negative |
-| `ErrExceedsLimit` | `WaitN` | `n` is larger than the limiter's capacity, so it can never be allowed |
-| `ErrRateLimitExceeded` | nothing in this package | a ready-made error for your own code to return when a limit is hit |
+| Error                               | Returned by             | Meaning                                                                |
+| ----------------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `ErrInvalidN`                       | `WaitN`                 | `n` is zero or negative                                                |
+| `ErrExceedsLimit`                   | `WaitN`                 | `n` is larger than the limiter's capacity, so it can never be allowed  |
+| `ErrRateLimitExceeded`              | nothing in this package | a ready-made error for your own code to return when a limit is hit     |
 | `redisstore.ErrResetAllUnsupported` | the Redis error handler | `ResetAll` was called on a client that does not implement `KeyDeleter` |
 
 Match them with `errors.Is`:
@@ -41,9 +41,9 @@ if err := limiter.WaitN(ctx, key, n); err != nil {
 The non-waiting methods have no error return, so they report an impossible `n`
 through their normal results:
 
-| Method | For `n <= 0` or `n` above capacity |
-| --- | --- |
-| `Allow`, `AllowN` | `false` |
+| Method            | For `n <= 0` or `n` above capacity                                   |
+| ----------------- | -------------------------------------------------------------------- |
+| `Allow`, `AllowN` | `false`                                                              |
 | `Check*`, `Take*` | `Result{Allowed: false, Limit: <capacity>}` with a zero `RetryAfter` |
 
 A denied `Result` with a zero `RetryAfter` means "waiting will not help". If

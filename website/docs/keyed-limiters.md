@@ -10,14 +10,14 @@ A keyed limiter keeps an independent limit for every key you pass it — a user
 ID, an IP address, an API key, or any string you build. Each in-memory
 algorithm has a keyed form:
 
-| Constructor | Algorithm |
-| --- | --- |
-| `NewKeyedTokenBucket(rate, burst, cleanupInterval)` | [token bucket](./token-bucket.md) |
-| `NewKeyedTokenBucketPerDuration(count, per, burst, cleanupInterval)` | token bucket |
-| `NewKeyedLeakyBucket(rate, capacity, cleanupInterval)` | [leaky bucket](./leaky-bucket.md) |
-| `NewKeyedLeakyBucketPerDuration(count, per, capacity, cleanupInterval)` | leaky bucket |
-| `NewKeyedFixedWindow(limit, window, cleanupInterval)` | [fixed window](./fixed-window.md) |
-| `NewKeyedSlidingWindow(limit, window, cleanupInterval)` | [sliding window counter](./sliding-window.md#sliding-window-counter) |
+| Constructor                                                             | Algorithm                                                            |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `NewKeyedTokenBucket(rate, burst, cleanupInterval)`                     | [token bucket](./token-bucket.md)                                    |
+| `NewKeyedTokenBucketPerDuration(count, per, burst, cleanupInterval)`    | token bucket                                                         |
+| `NewKeyedLeakyBucket(rate, capacity, cleanupInterval)`                  | [leaky bucket](./leaky-bucket.md)                                    |
+| `NewKeyedLeakyBucketPerDuration(count, per, capacity, cleanupInterval)` | leaky bucket                                                         |
+| `NewKeyedFixedWindow(limit, window, cleanupInterval)`                   | [fixed window](./fixed-window.md)                                    |
+| `NewKeyedSlidingWindow(limit, window, cleanupInterval)`                 | [sliding window counter](./sliding-window.md#sliding-window-counter) |
 
 ```go
 limiter := ratelimit.NewKeyedTokenBucket(10, 20, time.Minute)

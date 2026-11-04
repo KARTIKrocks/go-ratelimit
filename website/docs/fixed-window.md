@@ -34,12 +34,12 @@ which smooths across the boundary at the same memory cost.
 
 ## Result fields
 
-| Field | Value |
-| --- | --- |
-| `Limit` | `limit` |
-| `Remaining` | requests left in the current window |
+| Field        | Value                                       |
+| ------------ | ------------------------------------------- |
+| `Limit`      | `limit`                                     |
+| `Remaining`  | requests left in the current window         |
 | `RetryAfter` | when denied, the time until the window ends |
-| `ResetAt` | the end of the current window |
+| `ResetAt`    | the end of the current window               |
 
 ## Inspecting the window
 

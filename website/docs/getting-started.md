@@ -106,7 +106,11 @@ rejected request gets a `429 Too Many Requests` with a `Retry-After` header and
 a JSON body:
 
 ```json
-{"error":"rate_limit_exceeded","message":"Too many requests","retry_after":1}
+{
+  "error": "rate_limit_exceeded",
+  "message": "Too many requests",
+  "retry_after": 1
+}
 ```
 
 :::warning Behind a load balancer?
