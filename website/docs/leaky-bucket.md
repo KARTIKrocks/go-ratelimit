@@ -23,7 +23,7 @@ once.
 
 :::note A meter, not a queue
 
-This is the *leaky bucket as a meter*. Denied requests are rejected
+This is the _leaky bucket as a meter_. Denied requests are rejected
 immediately; nothing is queued and nothing is delayed. If you want a caller to
 wait for room, use `Wait`, which blocks until the request fits.
 
@@ -35,25 +35,25 @@ Measured from the other side, the water level of a leaky bucket is the number
 of tokens a token bucket is missing. With the same rate and size, the two make
 identical decisions; the differences are presentational:
 
-| | Token bucket | Leaky bucket |
-| --- | --- | --- |
-| Counts | tokens available | water used |
-| Starts | full of tokens | empty of water |
-| Size argument | `burst` | `capacity` |
-| Inspect with | `Tokens()` | `Water()` |
-| Redis implementation | ✓ | — |
+|                      | Token bucket     | Leaky bucket   |
+| -------------------- | ---------------- | -------------- |
+| Counts               | tokens available | water used     |
+| Starts               | full of tokens   | empty of water |
+| Size argument        | `burst`          | `capacity`     |
+| Inspect with         | `Tokens()`       | `Water()`      |
+| Redis implementation | ✓                | —              |
 
 Choose whichever models your problem more naturally. If you might move to
 Redis later, choose the token bucket.
 
 ## Result fields
 
-| Field | Value |
-| --- | --- |
-| `Limit` | `capacity` |
-| `Remaining` | room left in the bucket after the decision |
+| Field        | Value                                          |
+| ------------ | ---------------------------------------------- |
+| `Limit`      | `capacity`                                     |
+| `Remaining`  | room left in the bucket after the decision     |
 | `RetryAfter` | when denied, the time until enough has drained |
-| `ResetAt` | always zero |
+| `ResetAt`    | always zero                                    |
 
 ## Inspecting the bucket
 

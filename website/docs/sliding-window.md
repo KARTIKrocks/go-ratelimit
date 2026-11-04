@@ -31,12 +31,12 @@ the thousands.
 The log has no keyed or Redis variant. For a per-key sliding window, use the
 counter below.
 
-| Field | Value |
-| --- | --- |
-| `Limit` | `limit` |
-| `Remaining` | requests left in the trailing window |
-| `RetryAfter` | when denied, the time until the oldest request leaves the window |
-| `ResetAt` | when denied, the same moment as an absolute time; zero when allowed |
+| Field        | Value                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| `Limit`      | `limit`                                                             |
+| `Remaining`  | requests left in the trailing window                                |
+| `RetryAfter` | when denied, the time until the oldest request leaves the window    |
+| `ResetAt`    | when denied, the same moment as an absolute time; zero when allowed |
 
 `limiter.Count()` returns the number of requests currently in the window.
 
@@ -63,12 +63,12 @@ never off by more than the previous window's count, and in practice it is
 close — this is the algorithm Cloudflare and many API gateways use for exactly
 that reason. Memory is constant per key.
 
-| Field | Value |
-| --- | --- |
-| `Limit` | `limit` |
-| `Remaining` | `limit` minus the weighted estimate |
+| Field        | Value                                                         |
+| ------------ | ------------------------------------------------------------- |
+| `Limit`      | `limit`                                                       |
+| `Remaining`  | `limit` minus the weighted estimate                           |
 | `RetryAfter` | when denied, the computed time until the estimate leaves room |
-| `ResetAt` | the end of the current underlying window |
+| `ResetAt`    | the end of the current underlying window                      |
 
 ## Per-key
 

@@ -48,24 +48,24 @@ Key functions do not apply here; `WithKeyFunc` is ignored.
 
 ## Options
 
-| Option | Default | Effect |
-| --- | --- | --- |
-| `WithKeyFunc(fn)` | `IPKeyFunc` | how a request maps to a key — see [Key Functions](./key-functions.md) |
-| `WithOnLimitReached(fn)` | plain-text error | writes the response for a rejected request |
-| `WithStatusCode(code)` | `429` | status used by the default rejection response |
-| `WithHeaders(enabled)` | `true` | whether to set the rate limit headers |
-| `WithSkipFunc(fn)` | none | requests for which `fn` returns true bypass the limiter |
+| Option                   | Default          | Effect                                                                |
+| ------------------------ | ---------------- | --------------------------------------------------------------------- |
+| `WithKeyFunc(fn)`        | `IPKeyFunc`      | how a request maps to a key — see [Key Functions](./key-functions.md) |
+| `WithOnLimitReached(fn)` | plain-text error | writes the response for a rejected request                            |
+| `WithStatusCode(code)`   | `429`            | status used by the default rejection response                         |
+| `WithHeaders(enabled)`   | `true`           | whether to set the rate limit headers                                 |
+| `WithSkipFunc(fn)`       | none             | requests for which `fn` returns true bypass the limiter               |
 
 ## Response headers
 
 With headers enabled, every response that passes through the limiter gets:
 
-| Header | Value | When |
-| --- | --- | --- |
-| `X-RateLimit-Limit` | `Result.Limit` | always |
-| `X-RateLimit-Remaining` | `Result.Remaining` | always |
-| `X-RateLimit-Reset` | `Result.ResetAt` as Unix seconds | when the algorithm has a window |
-| `Retry-After` | `Result.RetryAfter`, rounded up to whole seconds | when rejected |
+| Header                  | Value                                            | When                            |
+| ----------------------- | ------------------------------------------------ | ------------------------------- |
+| `X-RateLimit-Limit`     | `Result.Limit`                                   | always                          |
+| `X-RateLimit-Remaining` | `Result.Remaining`                               | always                          |
+| `X-RateLimit-Reset`     | `Result.ResetAt` as Unix seconds                 | when the algorithm has a window |
+| `Retry-After`           | `Result.RetryAfter`, rounded up to whole seconds | when rejected                   |
 
 Token and leaky buckets refill continuously and have no reset time, so they do
 not send `X-RateLimit-Reset`.
@@ -91,7 +91,11 @@ ratelimit.WithOnLimitReached(ratelimit.JSONOnLimitReachedWithCode(http.StatusSer
 Both write:
 
 ```json
-{"error":"rate_limit_exceeded","message":"Too many requests","retry_after":3}
+{
+  "error": "rate_limit_exceeded",
+  "message": "Too many requests",
+  "retry_after": 3
+}
 ```
 
 For anything else, pass your own `OnLimitReached`. It receives the `Result`, so
@@ -110,7 +114,7 @@ ratelimit.WithOnLimitReached(func(w http.ResponseWriter, r *http.Request, res ra
 
 A custom `OnLimitReached` writes its own status. The exported
 `DefaultOnLimitReached` also always uses 429; to change the status of the
-plain-text response, use `WithStatusCode` *without* `WithOnLimitReached`.
+plain-text response, use `WithStatusCode` _without_ `WithOnLimitReached`.
 
 :::
 
@@ -119,13 +123,13 @@ plain-text response, use `WithStatusCode` *without* `WithOnLimitReached`.
 `WithSkipFunc` lets some requests through without touching the limiter. The
 package provides the common cases:
 
-| Skip function | Skips |
-| --- | --- |
-| `SkipHealthChecks` | `/health`, `/healthz`, `/ready`, `/readyz`, `/live`, `/livez`, `/ping` |
-| `SkipPaths(paths...)` | exact path matches |
-| `SkipMethods(methods...)` | the listed HTTP methods, e.g. `OPTIONS` |
-| `SkipPrivateIPs` | loopback and private-range client addresses (from `RemoteAddr`) |
-| `SkipIf(fns...)` | any request matched by one of `fns` |
+| Skip function             | Skips                                                                  |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `SkipHealthChecks`        | `/health`, `/healthz`, `/ready`, `/readyz`, `/live`, `/livez`, `/ping` |
+| `SkipPaths(paths...)`     | exact path matches                                                     |
+| `SkipMethods(methods...)` | the listed HTTP methods, e.g. `OPTIONS`                                |
+| `SkipPrivateIPs`          | loopback and private-range client addresses (from `RemoteAddr`)        |
+| `SkipIf(fns...)`          | any request matched by one of `fns`                                    |
 
 ```go
 ratelimit.WithSkipFunc(ratelimit.SkipIf(

@@ -33,12 +33,12 @@ bursts at all. A large `burst` is generous to bursty-but-honest clients.
 
 ## Result fields
 
-| Field | Value |
-| --- | --- |
-| `Limit` | `burst` |
-| `Remaining` | whole tokens left after the decision |
-| `RetryAfter` | when denied, the time until enough tokens have refilled |
-| `ResetAt` | always zero — a bucket refills continuously and has no window |
+| Field        | Value                                                         |
+| ------------ | ------------------------------------------------------------- |
+| `Limit`      | `burst`                                                       |
+| `Remaining`  | whole tokens left after the decision                          |
+| `RetryAfter` | when denied, the time until enough tokens have refilled       |
+| `ResetAt`    | always zero — a bucket refills continuously and has no window |
 
 ## Inspecting the bucket
 

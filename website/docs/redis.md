@@ -41,12 +41,12 @@ the in-memory ones.
 
 ## Limiters
 
-| Constructor | Algorithm |
-| --- | --- |
-| `NewRedisTokenBucket(client, prefix, rate, burst, opts...)` | [token bucket](./token-bucket.md) |
-| `NewRedisTokenBucketPerDuration(client, prefix, count, per, burst, opts...)` | token bucket |
-| `NewRedisSlidingWindow(client, prefix, limit, window, opts...)` | [sliding window counter](./sliding-window.md#sliding-window-counter) |
-| `NewRedisFixedWindow(client, prefix, limit, window, opts...)` | [fixed window](./fixed-window.md) |
+| Constructor                                                                  | Algorithm                                                            |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `NewRedisTokenBucket(client, prefix, rate, burst, opts...)`                  | [token bucket](./token-bucket.md)                                    |
+| `NewRedisTokenBucketPerDuration(client, prefix, count, per, burst, opts...)` | token bucket                                                         |
+| `NewRedisSlidingWindow(client, prefix, limit, window, opts...)`              | [sliding window counter](./sliding-window.md#sliding-window-counter) |
+| `NewRedisFixedWindow(client, prefix, limit, window, opts...)`                | [fixed window](./fixed-window.md)                                    |
 
 Windows have millisecond precision: they are rounded down to whole
 milliseconds and must be at least 1ms.
@@ -98,9 +98,9 @@ limiter := redisstore.NewRedisTokenBucket(store, "myapp", 10, 20,
 )
 ```
 
-| Option | Effect |
-| --- | --- |
-| `WithFailClosed()` | deny on a Redis error; the denied `Result` carries a one-second `RetryAfter`, and `WaitN` returns the error |
+| Option                 | Effect                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `WithFailClosed()`     | deny on a Redis error; the denied `Result` carries a one-second `RetryAfter`, and `WaitN` returns the error        |
 | `WithErrorHandler(fn)` | call `fn` with every Redis error, for logging or metrics; not called when the error is the caller's context ending |
 
 Fail open for general API traffic, where an outage of the limiter should not
@@ -122,13 +122,13 @@ defer cancel()
 result := limiter.TakeNCtx(ctx, key, 1)
 ```
 
-| Method | Context variant |
-| --- | --- |
-| `Take`, `TakeN` | `TakeNCtx(ctx, key, n)` |
+| Method            | Context variant          |
+| ----------------- | ------------------------ |
+| `Take`, `TakeN`   | `TakeNCtx(ctx, key, n)`  |
 | `Check`, `CheckN` | `CheckNCtx(ctx, key, n)` |
-| `Reset` | `ResetCtx(ctx, key)` |
-| `ResetAll` | `ResetAllCtx(ctx)` |
-| `Wait`, `WaitN` | already take a context |
+| `Reset`           | `ResetCtx(ctx, key)`     |
+| `ResetAll`        | `ResetAllCtx(ctx)`       |
+| `Wait`, `WaitN`   | already take a context   |
 
 Also set sensible `DialTimeout`, `ReadTimeout`, and `WriteTimeout` on the
 go-redis client itself.
